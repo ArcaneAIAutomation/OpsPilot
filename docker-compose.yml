@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# OpsPilot — Docker Compose
+# ---------------------------------------------------------------------------
+# Runs OpsPilot with persistent SQLite storage and all ports exposed.
+#
+# Usage:
+#   docker compose up -d          # start
+#   docker compose logs -f        # follow logs
+#   docker compose down           # stop
+#   docker compose up -d --build  # rebuild and start
+# ---------------------------------------------------------------------------
+
+services:
+  opspilot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: opspilot
+    restart: unless-stopped
+    ports:
+      - "3000:3000"   # REST API
+      - "3001:3001"   # WebSocket
+      - "3002:3002"   # Dashboard
+    volumes:
+      - opspilot-data:/app/data           # SQLite database
+      - ./config:/app/config:ro           # Configuration (read-only)
+    environment:
+      - NODE_ENV=production
+      # Uncomment and set these for AI provider integration:
+      # - OPENAI_API_KEY=sk-...
+      # - ANTHROPIC_API_KEY=sk-ant-...
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  opspilot-data:
+    driver: local

@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build output (rebuilt in container)
+dist/
+
+# Test files
+tests/
+coverage/
+
+# Development config
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Environment files
+.env
+.env.*
+
+# Docker files (no need to COPY into image)
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -6,6 +6,8 @@
 //
 // Endpoints:
 //   GET  /api/health                    — System health + module statuses
+//   GET  /api/livez                     — Liveness probe (always 200 if running)
+//   GET  /api/readyz                    — Readiness probe (200 if healthy, 503 if degraded)
 //   GET  /api/incidents                 — List incidents (?severity=&status=&limit=)
 //   GET  /api/incidents/:id             — Get single incident
 //   GET  /api/approvals/pending         — List pending approval requests
@@ -245,6 +247,12 @@ export class RestApiModule implements IModule {
     this.addRoute('GET', `${base}/health`, (req, res, params, query) =>
       this.handleHealth(req, res, params, query),
     );
+    this.addRoute('GET', `${base}/livez`, (req, res, params, query) =>
+      this.handleLivez(req, res, params, query),
+    );
+    this.addRoute('GET', `${base}/readyz`, (req, res, params, query) =>
+      this.handleReadyz(req, res, params, query),
+    );
     this.addRoute('GET', `${base}/incidents`, (req, res, params, query) =>
       this.handleListIncidents(req, res, params, query),
     );
@@ -401,6 +409,39 @@ export class RestApiModule implements IModule {
     };
 
     this.sendJson(res, overallHealthy ? 200 : 503, health);
+  }
+
+  /**
+   * Liveness probe — returns 200 if the process is running.
+   * Used by container orchestrators to detect deadlocked processes.
+   */
+  private async handleLivez(
+    _req: http.IncomingMessage,
+    res: http.ServerResponse,
+    _params: Record<string, string>,
+    _query: URLSearchParams,
+  ): Promise<void> {
+    this.sendJson(res, 200, { status: 'alive', timestamp: new Date().toISOString() });
+  }
+
+  /**
+   * Readiness probe — returns 200 if healthy, 503 if degraded/unhealthy.
+   * Used by load balancers to route traffic only to ready instances.
+   */
+  private async handleReadyz(
+    _req: http.IncomingMessage,
+    res: http.ServerResponse,
+    _params: Record<string, string>,
+    _query: URLSearchParams,
+  ): Promise<void> {
+    const modules = this.deps?.getModuleHealths?.() ?? {};
+    const ready = Object.values(modules).every(
+      (h) => h.status !== 'unhealthy',
+    );
+    this.sendJson(res, ready ? 200 : 503, {
+      status: ready ? 'ready' : 'not-ready',
+      timestamp: new Date().toISOString(),
+    });
   }
 
   private async handleListIncidents(

@@ -54,6 +54,16 @@ export interface DashboardDependencies {
   getModuleHealths: () => Record<string, ModuleHealth>;
 }
 
+// ── Setup checklist item ───────────────────────────────────────────────────
+
+interface SetupItem {
+  id: string;
+  label: string;
+  status: 'done' | 'stub' | 'missing';
+  detail: string;
+  guide: string;
+}
+
 // ── Stored event entry ─────────────────────────────────────────────────────
 
 export interface DashboardEvent {
@@ -240,12 +250,16 @@ export class DashboardModule implements IModule {
 
     if (path === '/' || path === '/index.html') {
       this.serveHtml(res);
+    } else if (path === '/setup') {
+      this.serveSetupHtml(res);
     } else if (path === '/api/status') {
       this.serveStatus(res);
     } else if (path === '/api/events') {
       this.serveEvents(res);
     } else if (path === '/api/modules') {
       this.serveModules(res);
+    } else if (path === '/api/setup') {
+      this.serveSetupJson(res);
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
@@ -336,6 +350,7 @@ export class DashboardModule implements IModule {
 </head>
 <body>
   <h1><span id="status-dot"></span>${title}</h1>
+  <div style="margin-bottom:16px;"><a href="/setup" style="color:#58a6ff;text-decoration:none;font-size:13px;">\u2699\ufe0f Setup Status &amp; Production Readiness Checklist \u2192</a></div>
 
   <div class="grid" id="summary">
     <div class="card">
@@ -437,6 +452,239 @@ export class DashboardModule implements IModule {
   setInterval(refresh, REFRESH);
 })();
 </script>
+</body>
+</html>`;
+  }
+
+  // ── Setup Status ──────────────────────────────────────────────────────────
+
+  /** Evaluate what's configured, stubbed, and missing. Public for testing. */
+  buildSetupChecklist(): SetupItem[] {
+    const moduleHealths = this.deps?.getModuleHealths() ?? {};
+    const moduleIds = Object.keys(moduleHealths);
+
+    const items: SetupItem[] = [];
+
+    // -- Core systems (always done) --
+    items.push({
+      id: 'core',
+      label: 'Core Architecture',
+      status: 'done',
+      detail: 'EventBus, config, lifecycle, dependency resolver, audit, approval gate',
+      guide: '',
+    });
+    items.push({
+      id: 'safety',
+      label: 'Safety Model',
+      status: 'done',
+      detail: 'Proposals \u2192 approval tokens (15-min TTL) \u2192 gated execution \u2192 audit log',
+      guide: '',
+    });
+
+    // -- Database --
+    items.push({
+      id: 'database',
+      label: 'Persistent Database',
+      status: 'missing',
+      detail: 'Data is stored in-memory (lost on restart). No PostgreSQL/SQLite backend.',
+      guide: 'Implement IStorageEngine (get/set/delete/list/has) with pg or better-sqlite3. Wire in Application.ts. See README \u2192 Storage Implementation Guide.',
+    });
+
+    // -- LLM --
+    const aiModule = moduleIds.includes('enricher.aiSummary');
+    items.push({
+      id: 'llm',
+      label: 'LLM Integration',
+      status: aiModule ? 'stub' : 'missing',
+      detail: aiModule
+        ? 'AI Summary module loaded but using template fallback. No real API key configured.'
+        : 'enricher.aiSummary module not enabled.',
+      guide: 'Set provider to "openai" or "anthropic" in config. Set OPENAI_API_KEY or ANTHROPIC_API_KEY env var. See README \u2192 LLM Integration Guide.',
+    });
+
+    // -- Auth --
+    items.push({
+      id: 'auth',
+      label: 'API Authentication',
+      status: 'missing',
+      detail: 'REST API (ui.api) has no authentication middleware. All endpoints are open.',
+      guide: 'Add JWT or API-key middleware to ui.api handleRequest(). See README \u2192 Auth Implementation Guide.',
+    });
+
+    // -- Connectors: real vs stubbed --
+    const realConnectors = ['connector.fileTail', 'connector.syslog', 'connector.metrics'];
+    const stubbedConnectors: Record<string, string> = {
+      'connector.kubernetes': 'Simulates K8s API. Needs @kubernetes/client-node SDK.',
+      'connector.cloudwatch': 'Simulates CloudWatch. Needs @aws-sdk/client-cloudwatch-logs.',
+      'connector.journald': 'Simulates journalctl. Needs real child_process spawn.',
+    };
+
+    for (const id of realConnectors) {
+      if (moduleIds.includes(id)) {
+        items.push({
+          id,
+          label: id,
+          status: 'done',
+          detail: 'Real implementation, working end-to-end.',
+          guide: '',
+        });
+      }
+    }
+    for (const [id, detail] of Object.entries(stubbedConnectors)) {
+      if (moduleIds.includes(id)) {
+        items.push({ id, label: id, status: 'stub', detail, guide: `Replace simulated API calls in src/modules/${id}/index.ts with real SDK.` });
+      }
+    }
+
+    // -- Notifiers: all stubbed --
+    const stubbedNotifiers: Record<string, string> = {
+      'notifier.slack': 'Builds correct payload but uses raw fetch. Needs Slack SDK + OAuth.',
+      'notifier.pagerduty': 'Builds correct payload but uses raw fetch. Needs PagerDuty SDK.',
+      'notifier.teams': 'Sends Adaptive Cards via webhook. Works for basic use; Graph API for richer features.',
+      'notifier.email': 'Builds HTML email with raw SMTP. Needs nodemailer for TLS/auth.',
+    };
+    for (const [id, detail] of Object.entries(stubbedNotifiers)) {
+      if (moduleIds.includes(id)) {
+        items.push({ id, label: id, status: 'stub', detail, guide: `Install proper SDK and update src/modules/${id}/index.ts.` });
+      }
+    }
+
+    // -- Detectors (all real) --
+    for (const id of ['detector.regex', 'detector.threshold', 'detector.anomaly']) {
+      if (moduleIds.includes(id)) {
+        items.push({ id, label: id, status: 'done', detail: 'Real detection logic, fully tested.', guide: '' });
+      }
+    }
+
+    // -- Containerization --
+    items.push({
+      id: 'container',
+      label: 'Containerization',
+      status: 'missing',
+      detail: 'No Dockerfile, docker-compose, or Helm chart.',
+      guide: 'See README \u2192 Container Guide for ready-to-use Dockerfile and docker-compose.yml.',
+    });
+
+    // -- Observability --
+    items.push({
+      id: 'prometheus',
+      label: 'Prometheus Metrics Export',
+      status: 'missing',
+      detail: 'Modules track internal counters but no /metrics endpoint exists.',
+      guide: 'Add a /metrics endpoint to ui.api that collects health().details from all modules. See README \u2192 Observability Guide.',
+    });
+
+    // -- Error Recovery --
+    items.push({
+      id: 'resilience',
+      label: 'Error Recovery & Resilience',
+      status: 'missing',
+      detail: 'No circuit breakers, retry-with-backoff, or dead letter queues.',
+      guide: 'Wrap external calls (fetch, DB) in a retry utility with exponential backoff. Add circuit breaker state to connectors and notifiers.',
+    });
+
+    return items;
+  }
+
+  private serveSetupJson(res: http.ServerResponse): void {
+    const checklist = this.buildSetupChecklist();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(checklist, null, 2));
+  }
+
+  private serveSetupHtml(res: http.ServerResponse): void {
+    const html = this.renderSetupHtml();
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(html);
+  }
+
+  /** Build the setup-status HTML page. Public for testing. */
+  renderSetupHtml(): string {
+    const title = this.esc(this.config.title) + ' — Setup Status';
+    const checklist = this.buildSetupChecklist();
+    const done = checklist.filter((i) => i.status === 'done').length;
+    const stub = checklist.filter((i) => i.status === 'stub').length;
+    const missing = checklist.filter((i) => i.status === 'missing').length;
+    const total = checklist.length;
+    const pct = Math.round((done / total) * 100);
+
+    const rows = checklist.map((item) => {
+      const icon = item.status === 'done' ? '\u2705' : item.status === 'stub' ? '\u26a0\ufe0f' : '\u274c';
+      const badgeClass = item.status === 'done' ? 'badge-healthy' : item.status === 'stub' ? 'badge-degraded' : 'badge-unhealthy';
+      const guideHtml = item.guide
+        ? `<div class="guide">${this.esc(item.guide)}</div>`
+        : '';
+      return `<tr>
+        <td>${icon}</td>
+        <td><strong>${this.esc(item.label)}</strong></td>
+        <td><span class="badge ${badgeClass}">${item.status}</span></td>
+        <td>${this.esc(item.detail)}${guideHtml}</td>
+      </tr>`;
+    }).join('\n');
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         background: #0d1117; color: #c9d1d9; padding: 20px; max-width: 1000px; margin: 0 auto; }
+  h1 { color: #58a6ff; margin-bottom: 8px; }
+  .subtitle { color: #8b949e; margin-bottom: 24px; font-size: 14px; }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .progress-bar { background: #21262d; border-radius: 8px; height: 24px; margin-bottom: 24px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 8px; background: linear-gradient(90deg, #238636 0%, #3fb950 100%);
+                    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #fff;
+                    min-width: 40px; transition: width 0.3s; }
+  .summary { display: flex; gap: 16px; margin-bottom: 24px; }
+  .sum-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 20px; flex: 1; text-align: center; }
+  .sum-num { font-size: 28px; font-weight: 700; }
+  .sum-num.green { color: #3fb950; }
+  .sum-num.yellow { color: #d29922; }
+  .sum-num.red { color: #f85149; }
+  .sum-label { font-size: 12px; color: #8b949e; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #21262d; vertical-align: top; }
+  th { color: #8b949e; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-healthy { background: #238636; color: #fff; }
+  .badge-degraded { background: #9e6a03; color: #fff; }
+  .badge-unhealthy { background: #da3633; color: #fff; }
+  .guide { margin-top: 6px; padding: 8px 12px; background: #161b22; border-left: 3px solid #58a6ff;
+           border-radius: 4px; font-size: 12px; color: #8b949e; line-height: 1.5; }
+  .nav { margin-bottom: 20px; }
+  .footer { margin-top: 24px; font-size: 11px; color: #484f58; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="nav"><a href="/">\u2190 Back to Dashboard</a></div>
+  <h1>${title}</h1>
+  <p class="subtitle">Honest assessment of what\u2019s production-ready, what\u2019s stubbed, and what\u2019s missing. Each missing item includes implementation guidance.</p>
+
+  <div class="progress-bar">
+    <div class="progress-fill" style="width: ${pct}%">${pct}% production-ready</div>
+  </div>
+
+  <div class="summary">
+    <div class="sum-card"><div class="sum-num green">${done}</div><div class="sum-label">\u2705 Complete</div></div>
+    <div class="sum-card"><div class="sum-num yellow">${stub}</div><div class="sum-label">\u26a0\ufe0f Stubbed</div></div>
+    <div class="sum-card"><div class="sum-num red">${missing}</div><div class="sum-label">\u274c Missing</div></div>
+  </div>
+
+  <table>
+    <thead><tr><th></th><th>Component</th><th>Status</th><th>Details &amp; Guidance</th></tr></thead>
+    <tbody>
+${rows}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    OpsPilot Setup Status \u2014 see <a href="https://github.com/ArcaneAIAutomation/OpsPilot#project-status">README \u2192 Project Status</a> for full implementation guides
+  </div>
 </body>
 </html>`;
   }

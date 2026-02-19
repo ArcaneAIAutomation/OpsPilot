@@ -11,7 +11,7 @@
 │   ├── cli/            # Interactive approval CLI
 │   ├── main.ts         # Application entry point
 │   └── index.ts        # Public API exports
-├── tests/              # Test suites (573 tests, 171 suites)
+├── tests/              # Test suites (667 tests, 196 suites, 39 test files)
 ├── dist/               # Compiled JavaScript output (gitignored)
 ├── logs/               # Runtime log files
 └── .docs/              # Architecture documentation
@@ -29,13 +29,14 @@ core/
 │   ├── config.ts       # Configuration types
 │   ├── storage.ts      # Storage engine interfaces
 │   ├── security.ts     # Approval gate, audit logger types
+│   ├── auth.ts         # Authentication types (IAuthService, AuthIdentity, AuthConfig)
 │   ├── openclaw.ts     # OpenClaw tool registry types
 │   └── index.ts        # Barrel export
 ├── bus/                # Event bus implementation
 ├── config/             # Config loader + JSON Schema validator
 ├── modules/            # Module lifecycle manager + dependency resolver
-├── storage/            # Storage engines (Memory, File, Namespaced)
-├── security/           # Approval gate + audit logger
+├── storage/            # Storage engines (Memory, File, SQLite, Namespaced)
+├── security/           # Approval gate + audit logger + AuthService (JWT + API key)
 ├── openclaw/           # Tool registry for AI agent integration
 ├── plugins/            # Dynamic plugin loader
 └── Application.ts      # Composition root, wires everything together
@@ -80,11 +81,15 @@ Tests mirror the source structure:
 
 ```
 tests/
-├── helpers.ts          # Shared test utilities
-├── eventbus.test.ts    # Core event bus tests
-├── storage.test.ts     # Storage engine tests
-├── module-*.test.ts    # Module-specific tests
-└── integration.test.ts # End-to-end pipeline tests
+├── helpers.ts                  # Shared test utilities
+├── eventbus.test.ts            # Core event bus tests
+├── storage.test.ts             # Storage engine tests (Memory, File, Namespaced)
+├── sqlite-storage.test.ts      # SQLite storage engine tests
+├── auth.test.ts                # AuthService unit tests (JWT + API key)
+├── auth-integration.test.ts    # Auth integration tests (REST API + Dashboard)
+├── module-*.test.ts            # Module-specific tests
+├── integration.test.ts         # End-to-end pipeline tests
+└── ... (39 test files total)
 ```
 
 Test naming: `<feature>.test.ts`

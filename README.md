@@ -150,7 +150,7 @@ npm start -- --cli --operator your-name
 npm test
 ```
 
-573 tests across 171 suites — all passing.
+667 tests across 196 suites — all passing.
 
 ### Type Check
 
@@ -177,10 +177,12 @@ npm run test:check     # Type-check including test files
 | `detector.anomaly` | **Complete** | Z-Score, MAD, IQR, EWMA — real statistical algorithms |
 | `enricher.correlator` | **Complete** | Time + content similarity correlation |
 | `enricher.dedup` | **Complete** | Deduplication with configurable windows |
-| `ui.api` | **Complete** | Real HTTP REST API (no auth — see below) |
+| `ui.api` | **Complete** | Real HTTP REST API with JWT + API key auth |
 | `ui.websocket` | **Complete** | Real WebSocket streaming |
 | `ui.dashboard` | **Complete** | Self-contained HTML dashboard |
-| Test suite | **Complete** | 573 tests, 171 suites, 0 failures |
+| SQLite storage | **Complete** | Persistent storage via `better-sqlite3` (WAL mode, ACID) |
+| JWT + API key auth | **Complete** | `AuthService` with HS256 JWT, constant-time API key comparison |
+| Test suite | **Complete** | 667 tests, 196 suites, 0 failures |
 
 ### What's Stubbed (interface exists, implementation simulated)
 
@@ -337,7 +339,7 @@ WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY package.json config/ ./config/
-EXPOSE 3000 3001
+EXPOSE 3000 3001 3002
 CMD ["node", "dist/main.js"]
 ```
 
@@ -348,7 +350,8 @@ services:
     build: .
     ports:
       - "3000:3000"   # REST API
-      - "3001:3001"   # Dashboard
+      - "3001:3001"   # WebSocket
+      - "3002:3002"   # Dashboard
     environment:
       - OPSPILOT_SYSTEM_ENVIRONMENT=production
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -446,8 +449,8 @@ Environment variables override config values using the `OPSPILOT_*` prefix.
 │   │   ├── bus/               # EventBus implementation
 │   │   ├── config/            # YAML config loader + JSON Schema validation
 │   │   ├── modules/           # Module lifecycle manager + dependency resolver
-│   │   ├── security/          # Approval gate + audit logger
-│   │   ├── storage/           # In-memory + file-based storage
+│   │   ├── security/          # Approval gate + audit logger + AuthService
+│   │   ├── storage/           # Memory, file, and SQLite storage engines
 │   │   ├── openclaw/          # OpenClaw tool registry
 │   │   ├── plugins/           # Dynamic plugin loader
 │   │   ├── types/             # Core type definitions
@@ -463,7 +466,7 @@ Environment variables override config values using the `OPSPILOT_*` prefix.
 │   ├── shared/                # Shared types and utilities
 │   ├── cli/                   # Interactive approval CLI
 │   └── main.ts                # Entry point
-├── tests/                     # Test suites (35 test files)
+├── tests/                     # Test suites (39 test files, 667 tests)
 └── .docs/                     # Architecture documentation
 ```
 
@@ -476,7 +479,7 @@ Environment variables override config values using the `OPSPILOT_*` prefix.
 | Config | YAML with JSON Schema validation (ajv) |
 | Testing | Node.js built-in test runner (`node:test` + `node:assert/strict`) |
 | Build | `tsc` (target ES2022, CommonJS) |
-| Dependencies | 2 production deps (`ajv`, `yaml`) |
+| Dependencies | 4 production deps (`ajv`, `yaml`, `better-sqlite3`, `jsonwebtoken`) |
 
 ## License
 

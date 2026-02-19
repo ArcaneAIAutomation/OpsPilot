@@ -12,19 +12,23 @@ Minimal production dependencies by design:
 
 - `ajv ^8.17.1` - JSON Schema validation
 - `yaml ^2.7.0` - YAML config parsing
+- `better-sqlite3 ^12.6.2` - SQLite persistent storage (WAL mode, prepared statements)
+- `jsonwebtoken` - JWT token signing and verification (HS256)
 
 ## Development Dependencies
 
 - `typescript ^5.7.0` - TypeScript compiler
 - `ts-node ^10.9.2` - Development runtime
 - `@types/node ^22.13.0` - Node.js type definitions
+- `@types/better-sqlite3` - SQLite type definitions
+- `@types/jsonwebtoken` - JWT type definitions
 - `rimraf ^6.0.1` - Cross-platform file cleanup
 
 ## Testing
 
 - **Framework**: Node.js built-in test runner (`node:test`)
 - **Assertions**: `node:assert/strict`
-- **Coverage**: 573 tests across 171 suites, all passing
+- **Coverage**: 667 tests across 196 suites, all passing
 - **Test helpers**: `tests/helpers.ts` provides shared utilities
 
 ## Build System
@@ -88,10 +92,10 @@ import { createSilentLogger } from '@shared/logger';
 Core modules use only Node.js built-ins:
 
 - `http` / `https` - REST API, webhooks
-- `crypto` - WebSocket handshake, UUID generation
+- `crypto` - WebSocket handshake, UUID generation, HMAC-based API key comparison
 - `fs` / `fs/promises` - File operations
 - `os` - System metrics
 - `dgram` / `net` - Syslog UDP/TCP
 - `child_process` - journald integration
 
-This ensures minimal attack surface and easy deployment.
+The only non-stdlib production dependencies are `ajv` (schema validation), `yaml` (config parsing), `better-sqlite3` (persistent storage), and `jsonwebtoken` (JWT auth). This ensures minimal attack surface and easy deployment.

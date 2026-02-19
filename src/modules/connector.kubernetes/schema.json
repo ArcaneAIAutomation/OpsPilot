@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "connector.kubernetes configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "pollIntervalMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 300000,
+      "default": 10000,
+      "description": "Polling interval for Kubernetes API in ms."
+    },
+    "source": {
+      "type": "string",
+      "default": "kubernetes",
+      "description": "Source identifier used in emitted events."
+    },
+    "apiUrl": {
+      "type": "string",
+      "default": "https://kubernetes.default.svc",
+      "description": "Kubernetes API server URL. Defaults to in-cluster service DNS."
+    },
+    "token": {
+      "type": "string",
+      "default": "",
+      "description": "Bearer token for Kubernetes API auth. If empty, reads from ServiceAccount."
+    },
+    "tokenPath": {
+      "type": "string",
+      "default": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+      "description": "Path to ServiceAccount token file."
+    },
+    "caPath": {
+      "type": "string",
+      "default": "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+      "description": "Path to CA certificate for Kubernetes API."
+    },
+    "namespace": {
+      "type": "string",
+      "default": "",
+      "description": "Namespace to watch. Empty = all namespaces."
+    },
+    "watchEvents": {
+      "type": "boolean",
+      "default": true,
+      "description": "Watch Kubernetes Events (Warning/Normal)."
+    },
+    "watchPods": {
+      "type": "boolean",
+      "default": true,
+      "description": "Watch Pod status changes (CrashLoopBackOff, OOMKilled, etc.)."
+    },
+    "watchNodes": {
+      "type": "boolean",
+      "default": false,
+      "description": "Watch Node condition changes."
+    },
+    "severityMap": {
+      "type": "object",
+      "properties": {
+        "Warning": { "type": "string", "default": "warning" },
+        "Normal": { "type": "string", "default": "info" },
+        "CrashLoopBackOff": { "type": "string", "default": "critical" },
+        "OOMKilled": { "type": "string", "default": "critical" },
+        "NodeNotReady": { "type": "string", "default": "critical" }
+      },
+      "additionalProperties": { "type": "string" },
+      "default": {
+        "Warning": "warning",
+        "Normal": "info",
+        "CrashLoopBackOff": "critical",
+        "OOMKilled": "critical",
+        "NodeNotReady": "critical"
+      }
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 10000,
+      "description": "HTTP request timeout for Kubernetes API calls."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "autoExecute": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, automatically starts runbook execution on enrichment match. When false, proposes for human approval first."
+    },
+    "requireApprovalPerStep": {
+      "type": "boolean",
+      "default": true,
+      "description": "When true, each runbook step requires separate human approval. When false, approving the runbook approves all steps."
+    },
+    "stepTimeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 300000,
+      "description": "Maximum time (ms) to wait for a step to complete before marking it failed."
+    },
+    "maxConcurrentRunbooks": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 10,
+      "description": "Maximum number of runbooks that can be executing simultaneously."
+    },
+    "maxRunbookHistory": {
+      "type": "integer",
+      "minimum": 10,
+      "default": 500,
+      "description": "Maximum number of completed runbook executions to retain in history."
+    },
+    "cooldownMs": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 60000,
+      "description": "Cooldown period after running a runbook for the same incident before another can start."
+    },
+    "severityFilter": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["info", "warning", "critical"]
+      },
+      "default": ["warning", "critical"],
+      "description": "Only trigger runbooks for incidents at these severity levels."
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "action.safe configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "autoPropose": {
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically propose remediation for new critical incidents."
+    },
+    "proposalDelaySec": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 5,
+      "description": "Seconds to wait before proposing (allows enrichment to arrive)."
+    },
+    "actions": {
+      "type": "array",
+      "description": "Configurable remediation actions. Each action maps severity/patterns to a handler.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique action identifier."
+          },
+          "actionType": {
+            "type": "string",
+            "description": "Action type label, e.g. restart.service, scale.up."
+          },
+          "description": {
+            "type": "string"
+          },
+          "triggerSeverity": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["info", "warning", "critical"] },
+            "description": "Triggers for these severity levels."
+          },
+          "triggerPattern": {
+            "type": "string",
+            "description": "Regex pattern matched against incident title."
+          },
+          "command": {
+            "type": "string",
+            "description": "The shell command or handler ID to execute upon approval."
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": ["id", "actionType", "description", "triggerSeverity"],
+        "additionalProperties": false
+      },
+      "default": []
+    }
+  },
+  "additionalProperties": false
+}

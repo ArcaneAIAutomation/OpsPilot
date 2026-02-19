@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "rules": {
+      "type": "array",
+      "description": "Threshold detection rules.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique rule identifier."
+          },
+          "metric": {
+            "type": "string",
+            "description": "Regex pattern to extract the metric name from log lines."
+          },
+          "valuePattern": {
+            "type": "string",
+            "description": "Regex pattern with a capture group for the numeric value."
+          },
+          "flags": {
+            "type": "string",
+            "default": "i",
+            "description": "Regex flags for metric and value patterns."
+          },
+          "threshold": {
+            "type": "number",
+            "description": "Numeric threshold value."
+          },
+          "operator": {
+            "type": "string",
+            "enum": ["gt", "gte", "lt", "lte", "eq"],
+            "description": "Comparison operator (gt = greater than, etc.)."
+          },
+          "windowMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "default": 60000,
+            "description": "Sliding window in milliseconds. Incident fires when condition persists across the window."
+          },
+          "minSamples": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Minimum number of samples in window before evaluating threshold."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["info", "warning", "critical"],
+            "description": "Severity of generated incidents."
+          },
+          "title": {
+            "type": "string",
+            "description": "Incident title. Supports $metric and $value placeholders."
+          },
+          "description": {
+            "type": "string",
+            "description": "Incident description. Supports $metric, $value, $threshold placeholders."
+          },
+          "cooldownMs": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 60000,
+            "description": "Cooldown period after an incident is created."
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": ["id", "metric", "valuePattern", "threshold", "operator", "severity", "title"],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "maxIncidentsPerMinute": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 30,
+      "description": "Global rate limit for incidents per minute."
+    }
+  },
+  "required": ["rules"],
+  "additionalProperties": false
+}

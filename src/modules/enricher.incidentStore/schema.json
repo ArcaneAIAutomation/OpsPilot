@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "enricher.incidentStore configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "maxIncidents": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 10000,
+      "description": "Maximum number of incidents to retain in storage."
+    },
+    "retentionMs": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 86400000,
+      "description": "How long to retain incidents in milliseconds (default 24h). 0 = infinite."
+    }
+  },
+  "additionalProperties": false
+}

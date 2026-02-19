@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ui.api configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "host": {
+      "type": "string",
+      "default": "0.0.0.0",
+      "description": "Host to bind the HTTP server to."
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 3000,
+      "description": "Port for the REST API server."
+    },
+    "basePath": {
+      "type": "string",
+      "default": "/api",
+      "description": "Base path prefix for all API routes."
+    },
+    "corsOrigin": {
+      "type": "string",
+      "default": "*",
+      "description": "CORS allowed origin. Use '*' for development."
+    }
+  },
+  "additionalProperties": false
+}

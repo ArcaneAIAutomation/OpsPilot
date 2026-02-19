@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "connector.cloudwatch configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "region": {
+      "type": "string",
+      "default": "us-east-1",
+      "description": "AWS region."
+    },
+    "accessKeyId": {
+      "type": "string",
+      "default": "",
+      "description": "AWS access key ID. If empty, uses default credential chain."
+    },
+    "secretAccessKey": {
+      "type": "string",
+      "default": "",
+      "description": "AWS secret access key."
+    },
+    "logGroups": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "CloudWatch Log Group names to poll."
+    },
+    "pollIntervalMs": {
+      "type": "integer",
+      "minimum": 5000,
+      "maximum": 300000,
+      "default": 30000,
+      "description": "Polling interval for CloudWatch Logs in ms."
+    },
+    "source": {
+      "type": "string",
+      "default": "cloudwatch",
+      "description": "Source identifier used in emitted events."
+    },
+    "lookbackMs": {
+      "type": "integer",
+      "minimum": 60000,
+      "maximum": 86400000,
+      "default": 300000,
+      "description": "How far back to query on first poll (default 5 minutes)."
+    },
+    "maxEventsPerPoll": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000,
+      "default": 1000,
+      "description": "Max log events to fetch per poll cycle."
+    },
+    "filterPattern": {
+      "type": "string",
+      "default": "",
+      "description": "CloudWatch Logs filter pattern (empty = all events)."
+    },
+    "endpointUrl": {
+      "type": "string",
+      "default": "",
+      "description": "Custom endpoint URL for CloudWatch Logs API (for testing/localstack)."
+    }
+  },
+  "required": ["logGroups"],
+  "additionalProperties": false
+}

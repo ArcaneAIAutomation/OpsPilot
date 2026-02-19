@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "enricher.aiSummary configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["template", "openai", "anthropic"],
+      "default": "template",
+      "description": "Which AI provider to use. 'template' uses deterministic template-based summaries (no external API)."
+    },
+    "model": {
+      "type": "string",
+      "default": "template",
+      "description": "Model identifier for the chosen provider."
+    },
+    "maxTokens": {
+      "type": "integer",
+      "minimum": 50,
+      "default": 500,
+      "description": "Maximum tokens for AI-generated summaries."
+    },
+    "apiKey": {
+      "type": "string",
+      "description": "API key for the chosen provider. Can also be set via OPENAI_API_KEY or ANTHROPIC_API_KEY environment variables."
+    },
+    "baseUrl": {
+      "type": "string",
+      "description": "Override the base URL for the AI API (useful for proxies or self-hosted models)."
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 30000,
+      "description": "Timeout in milliseconds for AI API calls."
+    },
+    "includeRunbook": {
+      "type": "boolean",
+      "default": true,
+      "description": "Include runbook suggestions in the summary."
+    },
+    "runbooks": {
+      "type": "array",
+      "description": "Embedded runbook snippets for RAG-style lookup.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "keywords": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "steps": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["id", "title", "keywords", "steps"],
+        "additionalProperties": false
+      },
+      "default": []
+    }
+  },
+  "additionalProperties": false
+}

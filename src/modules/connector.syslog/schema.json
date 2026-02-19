@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "connector.syslog configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "protocol": {
+      "type": "string",
+      "enum": ["udp", "tcp"],
+      "default": "udp",
+      "description": "Transport protocol for the syslog listener."
+    },
+    "host": {
+      "type": "string",
+      "default": "0.0.0.0",
+      "description": "Address to bind the syslog listener."
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 1514,
+      "description": "Port to bind the syslog listener (default 1514 to avoid root requirement)."
+    },
+    "source": {
+      "type": "string",
+      "default": "syslog",
+      "description": "Source identifier used in emitted events."
+    },
+    "maxMessageSize": {
+      "type": "integer",
+      "minimum": 480,
+      "maximum": 65536,
+      "default": 8192,
+      "description": "Maximum syslog message size in bytes."
+    },
+    "parseRfc": {
+      "type": "string",
+      "enum": ["3164", "5424", "auto"],
+      "default": "auto",
+      "description": "Which RFC format to parse. 'auto' detects per message."
+    }
+  },
+  "additionalProperties": false
+}

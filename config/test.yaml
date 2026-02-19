@@ -1,0 +1,116 @@
+# ---------------------------------------------------------------------------
+# OpsPilot — Test Configuration (reads from beginning)
+# ---------------------------------------------------------------------------
+
+system:
+  name: OpsPilot-Test
+  environment: development
+
+modules:
+  connector.fileTail:
+    enabled: true
+    path: ./logs/sample.log
+    encoding: utf-8
+    pollIntervalMs: 1000
+    fromBeginning: true
+
+  detector.regex:
+    enabled: true
+    maxIncidentsPerMinute: 30
+    rules:
+      - id: error-generic
+        pattern: "\\bERROR\\b"
+        flags: "i"
+        severity: critical
+        title: "Error detected in logs"
+        description: "Log error detected: $0"
+        cooldownMs: 0
+      - id: warn-high-resource
+        pattern: "(?:memory|cpu|disk) usage.*(\\d+)%"
+        flags: "i"
+        severity: warning
+        title: "High resource usage detected"
+        description: "Resource usage at $1%"
+        cooldownMs: 0
+
+  enricher.incidentStore:
+    enabled: true
+    maxIncidents: 1000
+    retentionMs: 0
+
+  enricher.aiSummary:
+    enabled: true
+    provider: template
+    model: template
+    includeRunbook: true
+    runbooks:
+      - id: rb-app-error
+        title: "Application Error Runbook"
+        keywords: ["error", "exception", "crash"]
+        steps:
+          - "Check application logs for stack traces"
+          - "Verify external dependencies"
+          - "Restart the service if unresponsive"
+      - id: rb-high-resource
+        title: "Resource Usage Runbook"
+        keywords: ["memory", "cpu", "disk", "usage"]
+        steps:
+          - "Check resource utilization"
+          - "Identify resource-heavy processes"
+          - "Scale or restart as needed"
+
+  action.safe:
+    enabled: true
+    autoPropose: true
+    proposalDelaySec: 0
+    actions:
+      - id: restart-on-error
+        actionType: restart.service
+        description: "Restart the affected service"
+        triggerSeverity: ["critical"]
+        triggerPattern: "error"
+        command: "echo 'simulated restart'"
+      - id: alert-on-warning
+        actionType: notify.team
+        description: "Alert the operations team"
+        triggerSeverity: ["warning", "critical"]
+
+  openclaw.tools:
+    enabled: true
+
+  notifier.channels:
+    enabled: true
+    rateLimitPerMinute: 100
+    channels:
+      - id: console-test
+        type: console
+        events:
+          - incident.created
+          - action.proposed
+          - action.approved
+          - action.executed
+        minSeverity: info
+
+  detector.threshold:
+    enabled: true
+    maxIncidentsPerMinute: 30
+    rules:
+      - id: cpu-test
+        metric: "cpu usage"
+        valuePattern: "(\\d+)%"
+        threshold: 90
+        operator: gt
+        windowMs: 60000
+        minSamples: 1
+        severity: critical
+        title: "CPU usage exceeded threshold"
+        description: "CPU at $value%"
+        cooldownMs: 0
+
+storage:
+  engine: memory
+
+logging:
+  level: debug
+  format: text
+  output: console

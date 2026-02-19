@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "connector.journald configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "pollIntervalMs": {
+      "type": "integer",
+      "minimum": 500,
+      "maximum": 60000,
+      "default": 2000,
+      "description": "Polling interval for journal cursor advances."
+    },
+    "source": {
+      "type": "string",
+      "default": "journald",
+      "description": "Source identifier used in emitted events."
+    },
+    "units": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Filter to specific systemd units (empty = all units)."
+    },
+    "priorities": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 7
+      },
+      "default": [0, 1, 2, 3, 4, 5, 6],
+      "description": "Syslog priorities to include (0=emerg..7=debug). Default excludes debug."
+    },
+    "maxEntriesPerPoll": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000,
+      "default": 500,
+      "description": "Max journal entries to process per polling cycle."
+    },
+    "sinceBoot": {
+      "type": "boolean",
+      "default": true,
+      "description": "If true, start reading from current boot. If false, start from tail."
+    }
+  },
+  "additionalProperties": false
+}

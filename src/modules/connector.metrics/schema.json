@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "intervalMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 10000,
+      "description": "Interval in ms between metric collection cycles."
+    },
+    "enabledMetrics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["cpu", "memory", "loadAvg", "uptime"]
+      },
+      "default": ["cpu", "memory", "loadAvg"],
+      "description": "Which system metrics to collect."
+    },
+    "thresholds": {
+      "type": "object",
+      "properties": {
+        "cpuPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 90,
+          "description": "CPU usage % that generates a warning-level log line."
+        },
+        "memoryPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 90,
+          "description": "Memory usage % that generates a warning-level log line."
+        }
+      },
+      "additionalProperties": false,
+      "default": {}
+    },
+    "source": {
+      "type": "string",
+      "default": "system-metrics",
+      "description": "Source identifier attached to emitted log.ingested events."
+    }
+  },
+  "additionalProperties": false
+}

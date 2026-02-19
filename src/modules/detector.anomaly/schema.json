@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "detector.anomaly configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "metrics": {
+      "type": "array",
+      "description": "Metric definitions to monitor for anomalies.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for this metric monitor."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable metric name for alerts."
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Regex to match log lines containing this metric."
+          },
+          "valuePattern": {
+            "type": "string",
+            "description": "Regex with capture group ($1) for the numeric value."
+          },
+          "flags": {
+            "type": "string",
+            "default": "i",
+            "description": "Regex flags."
+          },
+          "method": {
+            "type": "string",
+            "enum": ["zscore", "mad", "iqr", "ewma"],
+            "default": "zscore",
+            "description": "Anomaly detection method."
+          },
+          "sensitivity": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 10,
+            "default": 3.0,
+            "description": "Threshold multiplier. For z-score: number of std devs. For MAD: number of MAD units. For IQR: multiplier on IQR range. For EWMA: number of std devs from EWMA."
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["both", "high", "low"],
+            "default": "both",
+            "description": "Detect anomalies in both directions, only high, or only low."
+          },
+          "trainingWindowSize": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 100000,
+            "default": 100,
+            "description": "Number of data points to keep in the training window."
+          },
+          "minTrainingSamples": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 10000,
+            "default": 20,
+            "description": "Minimum samples needed before anomaly detection activates."
+          },
+          "ewmaAlpha": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1.0,
+            "default": 0.3,
+            "description": "Smoothing factor for EWMA method (higher = more weight on recent)."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["info", "warning", "critical"],
+            "default": "warning",
+            "description": "Incident severity when anomaly is detected."
+          },
+          "cooldownMs": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 300000,
+            "description": "Minimum time between alerts for this metric (ms)."
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": ["id", "name", "pattern", "valuePattern"],
+        "additionalProperties": false
+      },
+      "default": []
+    },
+    "maxIncidentsPerMinute": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 10,
+      "description": "Global rate limit for anomaly incidents per minute."
+    }
+  },
+  "additionalProperties": false
+}

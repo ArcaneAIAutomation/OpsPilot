@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "notifier.email configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "smtpHost": {
+      "type": "string",
+      "description": "SMTP server hostname."
+    },
+    "smtpPort": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 587,
+      "description": "SMTP server port (587 for STARTTLS, 465 for SSL, 25 for plain)."
+    },
+    "secure": {
+      "type": "boolean",
+      "default": false,
+      "description": "Use implicit TLS (port 465). For STARTTLS on 587, keep false."
+    },
+    "username": {
+      "type": "string",
+      "default": "",
+      "description": "SMTP authentication username."
+    },
+    "password": {
+      "type": "string",
+      "default": "",
+      "description": "SMTP authentication password."
+    },
+    "from": {
+      "type": "string",
+      "description": "Sender email address.",
+      "default": "opspilot@localhost"
+    },
+    "to": {
+      "type": "array",
+      "items": { "type": "string", "format": "email" },
+      "description": "Recipient email addresses.",
+      "default": []
+    },
+    "subjectPrefix": {
+      "type": "string",
+      "default": "[OpsPilot]",
+      "description": "Prefix prepended to all email subjects."
+    },
+    "events": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": ["incident.created", "action.proposed", "action.executed", "enrichment.completed"],
+      "description": "Event types to send emails for."
+    },
+    "minSeverity": {
+      "type": "string",
+      "enum": ["info", "warning", "critical"],
+      "default": "warning",
+      "description": "Minimum severity for incident events."
+    },
+    "rateLimitPerMinute": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "default": 10,
+      "description": "Max emails sent per minute."
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 30000,
+      "description": "SMTP connection timeout in ms."
+    }
+  },
+  "required": ["smtpHost", "to"],
+  "additionalProperties": false
+}

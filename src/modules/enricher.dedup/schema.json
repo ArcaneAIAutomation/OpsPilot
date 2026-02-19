@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "enricher.dedup configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "windowMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 300000,
+      "description": "Time window in ms during which duplicate incidents are suppressed (default 5 min)."
+    },
+    "fingerprintFields": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["title", "severity", "detectedBy", "description"]
+      },
+      "default": ["title", "severity", "detectedBy"],
+      "description": "Incident fields used to compute the deduplication fingerprint."
+    },
+    "maxFingerprints": {
+      "type": "integer",
+      "minimum": 100,
+      "default": 10000,
+      "description": "Maximum number of fingerprints retained in memory."
+    },
+    "emitSuppressed": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether to emit incident.suppressed events for each suppressed duplicate."
+    }
+  },
+  "additionalProperties": false
+}

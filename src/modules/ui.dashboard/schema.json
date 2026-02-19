@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ui.dashboard configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "host": {
+      "type": "string",
+      "default": "0.0.0.0",
+      "description": "Host to bind the dashboard server."
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 3001,
+      "description": "Port for the dashboard HTTP server."
+    },
+    "title": {
+      "type": "string",
+      "default": "OpsPilot Dashboard",
+      "description": "Dashboard page title."
+    },
+    "refreshIntervalMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 10000,
+      "description": "Auto-refresh interval for the dashboard in ms."
+    },
+    "maxRecentEvents": {
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 1000,
+      "default": 100,
+      "description": "Max recent events kept in the in-memory ring buffer."
+    }
+  },
+  "additionalProperties": false
+}

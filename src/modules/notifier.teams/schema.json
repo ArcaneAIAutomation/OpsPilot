@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "webhookUrl": {
+      "type": "string",
+      "description": "Microsoft Teams Incoming Webhook URL."
+    },
+    "events": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [
+        "incident.created",
+        "action.proposed",
+        "action.executed",
+        "enrichment.completed"
+      ],
+      "description": "Event types to forward to Teams."
+    },
+    "minSeverity": {
+      "type": "string",
+      "enum": ["info", "warning", "critical"],
+      "default": "warning",
+      "description": "Minimum incident severity to notify."
+    },
+    "rateLimitPerMinute": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 30,
+      "description": "Maximum messages per minute."
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 10000,
+      "description": "HTTP request timeout in milliseconds."
+    },
+    "themeColor": {
+      "type": "string",
+      "default": "",
+      "description": "Default card accent colour (hex, e.g. FF0000). Overridden per severity for incidents."
+    }
+  },
+  "required": ["webhookUrl"],
+  "additionalProperties": false
+}

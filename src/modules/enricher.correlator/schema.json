@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "enricher.correlator configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "timeWindowMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 60000,
+      "description": "Time window in ms within which incidents are considered related (default 60s)."
+    },
+    "similarityThreshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.4,
+      "description": "Minimum keyword similarity (0-1) to correlate two incidents."
+    },
+    "maxGroupSize": {
+      "type": "integer",
+      "minimum": 2,
+      "default": 50,
+      "description": "Maximum number of incidents in a single correlation group."
+    },
+    "stormThreshold": {
+      "type": "integer",
+      "minimum": 2,
+      "default": 5,
+      "description": "Number of correlated incidents within the time window that triggers a storm alert."
+    },
+    "maxGroups": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 500,
+      "description": "Maximum correlation groups retained in memory."
+    },
+    "groupTtlMs": {
+      "type": "integer",
+      "minimum": 10000,
+      "default": 3600000,
+      "description": "How long to keep a correlation group alive after last activity (default 1h)."
+    }
+  },
+  "additionalProperties": false
+}

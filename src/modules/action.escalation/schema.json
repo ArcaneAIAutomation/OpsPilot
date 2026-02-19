@@ -1,0 +1,88 @@
+{
+  "type": "object",
+  "properties": {
+    "checkIntervalMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 30000,
+      "description": "How often to sweep open incidents for escalation (ms)"
+    },
+    "policies": {
+      "type": "array",
+      "description": "Escalation policy definitions — matched by severity or incident ID prefix",
+      "items": {
+        "type": "object",
+        "required": ["id", "levels"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique policy identifier"
+          },
+          "matchSeverity": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["info", "warning", "critical"] },
+            "description": "Severities this policy applies to"
+          },
+          "matchTitlePattern": {
+            "type": "string",
+            "description": "Regex pattern to match against incident title (optional)"
+          },
+          "levels": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["level", "afterMs", "notify"],
+              "properties": {
+                "level": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Escalation level (1 = first escalation)"
+                },
+                "afterMs": {
+                  "type": "integer",
+                  "minimum": 1000,
+                  "description": "Time in ms after which this level triggers (since incident creation or last ack)"
+                },
+                "notify": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "List of targets to notify (channel IDs, email addresses, etc.)"
+                },
+                "repeat": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Whether to re-notify at this level on each sweep until resolved/escalated further"
+                },
+                "repeatIntervalMs": {
+                  "type": "integer",
+                  "minimum": 1000,
+                  "description": "If repeat=true, minimum interval between repeated notifications"
+                }
+              }
+            }
+          }
+        }
+      },
+      "default": []
+    },
+    "maxTrackedIncidents": {
+      "type": "integer",
+      "minimum": 10,
+      "default": 5000,
+      "description": "Maximum number of incidents to track escalation state for"
+    },
+    "resolvedStatuses": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": ["resolved", "closed"],
+      "description": "Incident statuses that stop escalation"
+    },
+    "acknowledgedPausesEscalation": {
+      "type": "boolean",
+      "default": true,
+      "description": "When true, acknowledging an incident pauses escalation timers"
+    }
+  },
+  "additionalProperties": false
+}

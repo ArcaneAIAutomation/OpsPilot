@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "connector.healthCheck configuration",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "intervalMs": {
+      "type": "integer",
+      "minimum": 5000,
+      "default": 30000,
+      "description": "Interval between health check cycles in ms (default 30s)."
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 10000,
+      "description": "Per-endpoint timeout in ms (default 10s)."
+    },
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for this endpoint."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name for this endpoint."
+          },
+          "url": {
+            "type": "string",
+            "description": "URL to probe (http:// or https:// for HTTP, tcp:// for TCP connect)."
+          },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "HEAD", "POST"],
+            "default": "GET",
+            "description": "HTTP method to use (ignored for TCP probes)."
+          },
+          "expectedStatus": {
+            "type": "integer",
+            "default": 200,
+            "description": "Expected HTTP status code (ignored for TCP probes)."
+          },
+          "expectedBodyContains": {
+            "type": "string",
+            "description": "Optional string that must appear in the response body."
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Optional HTTP headers to send."
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["info", "warning", "critical"],
+            "default": "critical",
+            "description": "Severity to assign to incidents from this endpoint."
+          },
+          "consecutiveFailures": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Number of consecutive failures before creating an incident."
+          }
+        },
+        "required": ["id", "name", "url"],
+        "additionalProperties": false
+      },
+      "default": [],
+      "description": "List of endpoints to probe."
+    },
+    "source": {
+      "type": "string",
+      "default": "health-check",
+      "description": "Source identifier for emitted events."
+    }
+  },
+  "additionalProperties": false
+}

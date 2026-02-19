@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "webhookUrl": {
+      "type": "string",
+      "description": "Slack Incoming Webhook URL."
+    },
+    "channel": {
+      "type": "string",
+      "description": "Override channel (e.g. #ops-alerts)."
+    },
+    "username": {
+      "type": "string",
+      "default": "OpsPilot",
+      "description": "Bot display name."
+    },
+    "iconEmoji": {
+      "type": "string",
+      "default": ":robot_face:",
+      "description": "Bot icon emoji."
+    },
+    "events": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [
+        "incident.created",
+        "action.proposed",
+        "action.approved",
+        "action.executed",
+        "enrichment.completed"
+      ],
+      "description": "Event types to forward to Slack."
+    },
+    "minSeverity": {
+      "type": "string",
+      "enum": ["info", "warning", "critical"],
+      "default": "warning",
+      "description": "Minimum incident severity to notify."
+    },
+    "rateLimitPerMinute": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 30,
+      "description": "Maximum messages per minute."
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 10000,
+      "description": "HTTP request timeout in milliseconds."
+    }
+  },
+  "required": ["webhookUrl"],
+  "additionalProperties": false
+}

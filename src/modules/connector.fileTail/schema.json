@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Absolute path to the log file to tail.",
+      "minLength": 1
+    },
+    "encoding": {
+      "type": "string",
+      "description": "File encoding.",
+      "enum": ["utf-8", "ascii", "latin1"],
+      "default": "utf-8"
+    },
+    "pollIntervalMs": {
+      "type": "integer",
+      "description": "How often (ms) to check for new data when using polling fallback.",
+      "minimum": 100,
+      "maximum": 60000,
+      "default": 1000
+    },
+    "fromBeginning": {
+      "type": "boolean",
+      "description": "If true, read the entire file on first start. If false, start from the end.",
+      "default": false
+    },
+    "maxLineLength": {
+      "type": "integer",
+      "description": "Maximum characters per line. Lines exceeding this are truncated.",
+      "minimum": 80,
+      "maximum": 1048576,
+      "default": 65536
+    }
+  },
+  "required": ["path"],
+  "additionalProperties": false
+}

@@ -200,7 +200,7 @@ npm run test:check     # Type-check including test files
 
 | Gap | Priority | Implementation Guide |
 |-----|----------|---------------------|
-| **Database** | **High** | Storage interface (`IStorageEngine`) is ready. Implement `PostgresStorage` or `SQLiteStorage` conforming to `get/set/delete/list/has`. See [Storage Implementation Guide](#storage-implementation-guide). |
+| ~~**Database**~~ | ~~**High**~~ | **DONE** — `SQLiteStorage` engine implemented via `better-sqlite3`. Supports all 7 `IStorageEngine` methods. Set `storage.engine: sqlite` in config with `options.dbPath`. WAL mode, prepared statements, zero-config. |
 | **LLM Integration** | **High** | Provider interface (`ISummarizer`) exists with `openai` and `anthropic` providers stubbed in `enricher.aiSummary/providers.ts`. Needs real API key handling, streaming, error recovery. See [LLM Integration Guide](#llm-integration-guide). |
 | **Authentication** | **High** | REST API (`ui.api`) has zero auth. Needs JWT or API key middleware on all endpoints. See [Auth Implementation Guide](#auth-implementation-guide). |
 | **Containerization** | **Medium** | No Dockerfile, docker-compose, or Helm chart. See [Container Guide](#container-guide). |
@@ -215,60 +215,38 @@ npm run test:check     # Type-check including test files
 
 ### Storage Implementation Guide
 
-The `IStorageEngine` interface in `src/core/types/storage.ts` defines 5 methods: `get`, `set`, `delete`, `list`, `has`. Currently only `MemoryStorage` (volatile) and `FileStorage` (JSON files) exist.
+> **Status: COMPLETE** — SQLite storage is fully implemented via `better-sqlite3`.
 
-**To add PostgreSQL:**
+Three storage engines are available:
 
-```bash
-npm install pg
+| Engine | Class | Use Case |
+|--------|-------|----------|
+| `memory` | `MemoryStorage` | Development/testing (volatile) |
+| `file` | `FileStorage` | Simple persistence (JSON files) |
+| `sqlite` | `SQLiteStorage` | **Production** (WAL mode, prepared statements, ACID) |
+
+**To enable SQLite persistence:**
+
+```yaml
+# config/default.yaml
+storage:
+  engine: sqlite
+  options:
+    dbPath: ./data/opspilot.db
 ```
 
-```typescript
-// src/core/storage/PostgresStorage.ts
-import { Pool } from 'pg';
-import { IStorageEngine, StorageFilter } from '../types/storage';
+The `SQLiteStorage` engine:
+- Implements all 7 `IStorageEngine` methods (`get`, `set`, `delete`, `list`, `has`, `count`, `clear`)
+- Uses a single `opspilot_kv` table with `(collection, key)` composite primary key
+- Values stored as JSON text, parsed on retrieval
+- WAL journal mode for concurrent read performance
+- Prepared statements for query efficiency
+- Auto-creates parent directories for the DB file
+- Supports `:memory:` mode for in-memory SQLite (testing)
 
-export class PostgresStorage implements IStorageEngine {
-  private pool: Pool;
+**To add PostgreSQL** (future):
 
-  constructor(connectionString: string) {
-    this.pool = new Pool({ connectionString });
-  }
-
-  async get<T>(collection: string, key: string): Promise<T | undefined> {
-    const { rows } = await this.pool.query(
-      'SELECT value FROM opspilot_kv WHERE collection = $1 AND key = $2',
-      [collection, key],
-    );
-    return rows[0]?.value as T | undefined;
-  }
-
-  async set<T>(collection: string, key: string, value: T): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO opspilot_kv (collection, key, value, updated_at)
-       VALUES ($1, $2, $3, NOW())
-       ON CONFLICT (collection, key) DO UPDATE SET value = $3, updated_at = NOW()`,
-      [collection, key, JSON.stringify(value)],
-    );
-  }
-
-  // ... implement delete, list, has
-}
-```
-
-**Required table:**
-```sql
-CREATE TABLE opspilot_kv (
-  collection VARCHAR(255) NOT NULL,
-  key VARCHAR(255) NOT NULL,
-  value JSONB NOT NULL,
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  PRIMARY KEY (collection, key)
-);
-CREATE INDEX idx_opspilot_kv_collection ON opspilot_kv (collection);
-```
-
-**Wire it in** `src/core/Application.ts` — replace `new MemoryStorage()` with `new PostgresStorage(config.database.url)`.
+Follow the same `IStorageEngine` interface pattern. See `src/core/storage/SQLiteStorage.ts` for reference. Add a `case 'postgres'` to `Application.ts → createStorageEngine()`.
 
 ---
 

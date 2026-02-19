@@ -39,7 +39,7 @@ const ROOT_SCHEMA = {
     storage: {
       type: 'object',
       properties: {
-        engine: { type: 'string', enum: ['memory', 'file', 'database'] },
+        engine: { type: 'string', enum: ['memory', 'file', 'sqlite', 'database'] },
         options: { type: 'object' },
       },
       additionalProperties: false,

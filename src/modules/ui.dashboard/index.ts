@@ -482,12 +482,21 @@ export class DashboardModule implements IModule {
     });
 
     // -- Database --
+    // Check if the underlying storage engine is persistent
+    const storageInner = (this.ctx?.storage as unknown as { inner?: { constructor: { name: string } } })?.inner;
+    const engineName = storageInner?.constructor?.name ?? '';
+    const hasPersistentDb = engineName === 'SQLiteStorage' || engineName === 'FileStorage';
+    const engineLabel = engineName === 'SQLiteStorage' ? 'SQLite' : engineName === 'FileStorage' ? 'file' : 'memory';
     items.push({
       id: 'database',
       label: 'Persistent Database',
-      status: 'missing',
-      detail: 'Data is stored in-memory (lost on restart). No PostgreSQL/SQLite backend.',
-      guide: 'Implement IStorageEngine (get/set/delete/list/has) with pg or better-sqlite3. Wire in Application.ts. See README \u2192 Storage Implementation Guide.',
+      status: hasPersistentDb ? 'done' : 'missing',
+      detail: hasPersistentDb
+        ? `Using ${engineLabel} storage engine. Data persists across restarts.`
+        : 'Data is stored in-memory (lost on restart). No persistent backend configured.',
+      guide: hasPersistentDb
+        ? ''
+        : 'Set storage.engine to "sqlite" in config with options.dbPath. See README \u2192 Storage Implementation Guide.',
     });
 
     // -- LLM --

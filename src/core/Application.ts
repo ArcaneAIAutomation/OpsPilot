@@ -26,6 +26,7 @@ import { ModuleLoader } from './modules/ModuleLoader';
 import { ModuleRegistry } from './modules/ModuleRegistry';
 import { MemoryStorage } from './storage/MemoryStorage';
 import { FileStorage } from './storage/FileStorage';
+import { SQLiteStorage } from './storage/SQLiteStorage';
 import { AuditLogger } from './security/AuditLogger';
 import { ApprovalGate } from './security/ApprovalGate';
 import { ToolRegistry } from './openclaw/ToolRegistry';
@@ -333,6 +334,11 @@ export class Application {
   private createStorageEngine(): IStorageEngine {
     const engine = this.config.storage?.engine ?? 'memory';
     switch (engine) {
+      case 'sqlite': {
+        const dbPath = (this.config.storage?.options?.dbPath as string) ?? './data/opspilot.db';
+        this.logger.info('Using SQLite storage', { dbPath });
+        return new SQLiteStorage(dbPath);
+      }
       case 'file': {
         const dataDir = (this.config.storage?.options?.dataDir as string) ?? './data';
         this.logger.info('Using file-based storage', { dataDir });

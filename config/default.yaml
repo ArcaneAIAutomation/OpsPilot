@@ -450,9 +450,9 @@ modules:
   # ── HTML Dashboard ───────────────────────────────────────────────────
   # Self-contained HTML dashboard for operational visibility.
   ui.dashboard:
-    enabled: false
+    enabled: true
     host: "0.0.0.0"
-    port: 3001
+    port: 3002
     title: "OpsPilot Dashboard"
     refreshIntervalMs: 10000
     maxRecentEvents: 100
@@ -463,6 +463,11 @@ storage:
   # engine: file
   # options:
   #   dataDir: ./data
+  #
+  # To enable SQLite persistent storage (recommended for production):
+  # engine: sqlite
+  # options:
+  #   dbPath: ./data/opspilot.db
 
 # Optional directory for external plugin modules (dynamic loading at startup)
 # pluginsDir: ./plugins

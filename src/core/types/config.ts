@@ -41,7 +41,7 @@ export interface ModuleConfig {
 
 export interface StorageConfig {
   /** Storage backend. Only `memory` is available in Phase 1. */
-  engine: 'memory' | 'file' | 'database';
+  engine: 'memory' | 'file' | 'sqlite' | 'database';
 
   /** Engine-specific options. */
   options?: Record<string, unknown>;

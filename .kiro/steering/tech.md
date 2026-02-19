@@ -1,0 +1,97 @@
+# OpsPilot Tech Stack
+
+## Language & Runtime
+
+- **TypeScript 5.7+** with strict mode enabled
+- **Node.js ≥20.0.0** required
+- **Target**: ES2022, CommonJS modules
+
+## Core Dependencies
+
+Minimal production dependencies by design:
+
+- `ajv ^8.17.1` - JSON Schema validation
+- `yaml ^2.7.0` - YAML config parsing
+
+## Development Dependencies
+
+- `typescript ^5.7.0` - TypeScript compiler
+- `ts-node ^10.9.2` - Development runtime
+- `@types/node ^22.13.0` - Node.js type definitions
+- `rimraf ^6.0.1` - Cross-platform file cleanup
+
+## Testing
+
+- **Framework**: Node.js built-in test runner (`node:test`)
+- **Assertions**: `node:assert/strict`
+- **Coverage**: 573 tests across 171 suites, all passing
+- **Test helpers**: `tests/helpers.ts` provides shared utilities
+
+## Build System
+
+Standard TypeScript compilation:
+
+```bash
+# Build
+npm run build          # Compiles src/ → dist/
+
+# Clean
+npm run clean          # Removes dist/
+
+# Type check tests
+npm run test:check     # Validates test files without running
+```
+
+## Common Commands
+
+```bash
+# Development
+npm run dev            # Run with ts-node (no build required)
+
+# Production
+npm start              # Run compiled code from dist/
+
+# Testing
+npm test               # Run full test suite
+
+# With CLI approval interface
+npm start -- --cli --operator your-name
+```
+
+## Configuration
+
+- **Format**: YAML with JSON Schema validation
+- **Location**: `config/default.yaml`, `config/test.yaml`
+- **Overrides**: Environment variables with `OPSPILOT_*` prefix
+- **Validation**: Per-module schemas in `src/modules/*/schema.json`
+
+## Path Aliases
+
+Configured in `tsconfig.json`:
+
+```typescript
+import { EventBus } from '@core/bus';
+import { IModule } from '@core/types';
+import { createSilentLogger } from '@shared/logger';
+```
+
+## Architecture Patterns
+
+- **Dependency Injection**: ModuleContext injected at initialization
+- **Factory Pattern**: ModuleLoader uses factory functions
+- **Event-Driven**: All inter-module communication via EventBus
+- **Lifecycle Management**: Strict state machine (Registered → Initialized → Running → Stopped → Destroyed)
+- **Namespaced Storage**: Modules cannot access each other's data
+
+## Zero External Runtime Dependencies
+
+Core modules use only Node.js built-ins:
+
+- `http` / `https` - REST API, webhooks
+- `crypto` - WebSocket handshake, UUID generation
+- `fs` / `fs/promises` - File operations
+- `os` - System metrics
+- `dgram` / `net` - Syslog UDP/TCP
+- `child_process` - journald integration
+
+This ensures minimal attack surface and easy deployment.

@@ -116,15 +116,23 @@ export async function retryWithBackoffResult<T>(
 
 /**
  * Predicate: retry on HTTP 429 (Too Many Requests) and 5xx errors.
+ * Checks error.message for "returned NNN" patterns, and also checks
+ * a `.status` or `.statusCode` property on the error object.
  */
 export function isRetryableHttpError(error: unknown): boolean {
   if (error instanceof Error) {
     const msg = error.message;
-    // Match "returned 429" or "returned 5xx" patterns
+    // Match "returned 429" or "returned 5xx" patterns in message
     const statusMatch = msg.match(/returned (\d{3})/);
     if (statusMatch) {
       const status = parseInt(statusMatch[1], 10);
       return status === 429 || (status >= 500 && status < 600);
+    }
+    // Check for a .status or .statusCode property on the error
+    const errAny = error as Error & { status?: number; statusCode?: number };
+    const statusProp = errAny.status ?? errAny.statusCode;
+    if (typeof statusProp === 'number') {
+      return statusProp === 429 || (statusProp >= 500 && statusProp < 600);
     }
     // Network errors are retryable
     if (msg.includes('fetch failed') || msg.includes('ECONNREFUSED') ||

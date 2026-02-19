@@ -9,12 +9,18 @@
 //   - Parses structured JSON from the AI response
 //   - Falls back to template summarization on failure
 //   - Handles rate limits, timeouts, and API errors gracefully
+//   - Supports retry with exponential backoff (429/5xx)
+//   - Circuit breaker prevents cascading failures
+//   - LRU response cache avoids duplicate API calls
 //
 // AI is used ONLY for: summarisation, reasoning, classification, explanation.
 // AI is NEVER used for: execution, action, mutation, or approval decisions.
 // ---------------------------------------------------------------------------
 
+import { createHash } from 'node:crypto';
 import { IncidentCreatedPayload } from '../../shared/events';
+import { CircuitBreaker, CircuitState } from '../../shared/circuit-breaker';
+import { retryWithBackoff, isRetryableHttpError } from '../../shared/retry';
 
 // ── Shared Types ───────────────────────────────────────────────────────────
 
@@ -398,6 +404,233 @@ export function createSummarizer(config: AIProviderConfig): ISummarizer {
     default:
       return new TemplateSummarizer();
   }
+}
+
+// ── Response Cache ─────────────────────────────────────────────────────────
+
+/**
+ * LRU cache entry for AI responses.
+ */
+interface CacheEntry {
+  result: SummaryResult;
+  cachedAt: number;
+}
+
+/**
+ * Simple LRU cache for AI responses to avoid duplicate API calls.
+ */
+export class ResponseCache {
+  private readonly cache = new Map<string, CacheEntry>();
+  private readonly maxSize: number;
+  private readonly ttlMs: number;
+
+  constructor(maxSize: number = 100, ttlMs: number = 300_000) {
+    this.maxSize = maxSize;
+    this.ttlMs = ttlMs;
+  }
+
+  /**
+   * Generate a cache key from incident data.
+   */
+  key(incident: IncidentCreatedPayload): string {
+    const hash = createHash('sha256');
+    hash.update(incident.incidentId);
+    hash.update(incident.title);
+    hash.update(incident.description);
+    hash.update(incident.severity);
+    return hash.digest('hex').slice(0, 16);
+  }
+
+  /**
+   * Get a cached result if available and not expired.
+   */
+  get(cacheKey: string): SummaryResult | undefined {
+    const entry = this.cache.get(cacheKey);
+    if (!entry) return undefined;
+
+    if (Date.now() - entry.cachedAt > this.ttlMs) {
+      this.cache.delete(cacheKey);
+      return undefined;
+    }
+
+    // Move to end (LRU refresh)
+    this.cache.delete(cacheKey);
+    this.cache.set(cacheKey, entry);
+    return entry.result;
+  }
+
+  /**
+   * Store a result in the cache.
+   */
+  set(cacheKey: string, result: SummaryResult): void {
+    // Evict oldest if at capacity
+    if (this.cache.size >= this.maxSize) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest !== undefined) this.cache.delete(oldest);
+    }
+    this.cache.set(cacheKey, { result, cachedAt: Date.now() });
+  }
+
+  /**
+   * Clear all cached entries.
+   */
+  clear(): void {
+    this.cache.clear();
+  }
+
+  /**
+   * Number of cached entries.
+   */
+  get size(): number {
+    return this.cache.size;
+  }
+}
+
+// ── Resilient Summarizer ───────────────────────────────────────────────────
+
+/**
+ * Configuration for the resilient summarizer wrapper.
+ */
+export interface ResilientSummarizerConfig {
+  /** Maximum retries for transient errors. Default: 2. */
+  maxRetries?: number;
+  /** Base delay for retry backoff in ms. Default: 1000. */
+  retryBaseDelayMs?: number;
+  /** Circuit breaker failure threshold. Default: 5. */
+  circuitBreakerThreshold?: number;
+  /** Circuit breaker reset timeout in ms. Default: 60000. */
+  circuitBreakerResetMs?: number;
+  /** Cache max entries. Default: 100. */
+  cacheMaxSize?: number;
+  /** Cache TTL in ms. Default: 300000 (5 min). */
+  cacheTtlMs?: number;
+  /** Optional callback for retry/circuit events. */
+  onEvent?: (event: string, details?: Record<string, unknown>) => void;
+}
+
+/**
+ * Wraps any ISummarizer with retry, circuit breaker, and caching.
+ *
+ * Composition order: Cache → Circuit Breaker → Retry → Provider
+ */
+export class ResilientSummarizer implements ISummarizer {
+  private readonly inner: ISummarizer;
+  private readonly fallback: ISummarizer;
+  readonly cache: ResponseCache;
+  readonly circuitBreaker: CircuitBreaker;
+  private readonly maxRetries: number;
+  private readonly retryBaseDelayMs: number;
+  private readonly onEvent: ((event: string, details?: Record<string, unknown>) => void) | undefined;
+
+  // Metrics
+  cacheHits = 0;
+  cacheMisses = 0;
+  retryAttempts = 0;
+  circuitBreaks = 0;
+  fallbackUsed = 0;
+
+  constructor(
+    inner: ISummarizer,
+    fallback: ISummarizer,
+    config: ResilientSummarizerConfig = {},
+  ) {
+    this.inner = inner;
+    this.fallback = fallback;
+    this.maxRetries = config.maxRetries ?? 2;
+    this.retryBaseDelayMs = config.retryBaseDelayMs ?? 1000;
+    this.onEvent = config.onEvent;
+
+    this.cache = new ResponseCache(
+      config.cacheMaxSize ?? 100,
+      config.cacheTtlMs ?? 300_000,
+    );
+
+    this.circuitBreaker = new CircuitBreaker({
+      failureThreshold: config.circuitBreakerThreshold ?? 5,
+      resetTimeoutMs: config.circuitBreakerResetMs ?? 60_000,
+      name: 'ai-provider',
+    });
+  }
+
+  async summarize(
+    incident: IncidentCreatedPayload,
+    runbooks: Runbook[],
+  ): Promise<SummaryResult> {
+    // 1. Check cache
+    const cacheKey = this.cache.key(incident);
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      this.cacheHits++;
+      this.onEvent?.('cache.hit', { incidentId: incident.incidentId });
+      return cached;
+    }
+    this.cacheMisses++;
+
+    // 2. Circuit breaker → Retry → Provider
+    try {
+      const result = await this.circuitBreaker.execute(() =>
+        retryWithBackoff(
+          () => this.inner.summarize(incident, runbooks),
+          {
+            maxRetries: this.maxRetries,
+            baseDelayMs: this.retryBaseDelayMs,
+            isRetryable: isRetryableHttpError,
+            onRetry: (attempt, error, delayMs) => {
+              this.retryAttempts++;
+              this.onEvent?.('retry', {
+                attempt,
+                error: error instanceof Error ? error.message : String(error),
+                delayMs,
+              });
+            },
+          },
+        ),
+      );
+
+      // Cache successful result
+      this.cache.set(cacheKey, result);
+      return result;
+    } catch (error) {
+      // Track circuit breaks
+      if (this.circuitBreaker.getState() === CircuitState.Open) {
+        this.circuitBreaks++;
+        this.onEvent?.('circuit.open', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      // Fall back to template summarizer
+      this.fallbackUsed++;
+      this.onEvent?.('fallback', {
+        incidentId: incident.incidentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return this.fallback.summarize(incident, runbooks);
+    }
+  }
+}
+
+/**
+ * Create a summarizer with optional resilience wrapping.
+ * For external providers (openai, anthropic), wraps with ResilientSummarizer.
+ * For template provider, returns as-is (no retry/cache needed).
+ */
+export function createResilientSummarizer(
+  config: AIProviderConfig,
+  resilientConfig?: ResilientSummarizerConfig,
+): ISummarizer {
+  const base = createSummarizer(config);
+
+  // Template provider doesn't need resilience wrapping
+  if (config.provider === 'template') {
+    return base;
+  }
+
+  return new ResilientSummarizer(
+    base,
+    new TemplateSummarizer(),
+    resilientConfig,
+  );
 }
 
 // Re-export for tests

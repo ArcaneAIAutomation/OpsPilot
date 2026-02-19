@@ -36,7 +36,7 @@ import configSchema from './schema.json';
 import {
   ISummarizer,
   Runbook,
-  createSummarizer,
+  createResilientSummarizer,
   TemplateSummarizer,
 } from './providers';
 
@@ -95,17 +95,30 @@ export class AISummaryEnricher implements IModule {
     } as AISummaryConfig;
 
     // Initialize the appropriate summarizer using the provider factory.
-    // If an external provider fails to construct (e.g. missing API key),
-    // we fall back to the template provider and log a warning.
+    // External providers are wrapped with retry, circuit breaker, and cache
+    // via createResilientSummarizer. If construction fails, fall back to template.
     try {
-      this.summarizer = createSummarizer({
-        provider: this.config.provider,
-        model: this.config.model,
-        maxTokens: this.config.maxTokens,
-        apiKey: this.config.apiKey,
-        baseUrl: this.config.baseUrl,
-        timeoutMs: this.config.timeoutMs,
-      });
+      this.summarizer = createResilientSummarizer(
+        {
+          provider: this.config.provider,
+          model: this.config.model,
+          maxTokens: this.config.maxTokens,
+          apiKey: this.config.apiKey,
+          baseUrl: this.config.baseUrl,
+          timeoutMs: this.config.timeoutMs,
+        },
+        {
+          maxRetries: 2,
+          retryBaseDelayMs: 1000,
+          circuitBreakerThreshold: 5,
+          circuitBreakerResetMs: 60_000,
+          cacheMaxSize: 100,
+          cacheTtlMs: 300_000,
+          onEvent: (event, details) => {
+            this.ctx.logger.debug(`AI resilience event: ${event}`, details);
+          },
+        },
+      );
     } catch (err) {
       this.ctx.logger.warn('AI provider initialization failed, falling back to template', {
         provider: this.config.provider,

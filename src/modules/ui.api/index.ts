@@ -33,6 +33,7 @@ import { IStorageEngine } from '../../core/types/storage';
 import { IApprovalGate, IAuditLogger, ApprovalStatus } from '../../core/types/security';
 import { IToolRegistry } from '../../core/types/openclaw';
 import { IAuthService, AuthIdentity } from '../../core/types/auth';
+import { KeyedRateLimiter, RateLimitResult } from '../../shared/rate-limiter';
 import configSchema from './schema.json';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@ interface ApiConfig {
   port: number;
   basePath: string;
   corsOrigin: string;
+  rateLimitPerMinute: number;
 }
 
 interface RouteMatch {
@@ -110,6 +112,7 @@ export class RestApiModule implements IModule {
   private server: http.Server | null = null;
   private routes: Route[] = [];
   private deps!: ApiDependencies;
+  private rateLimiter!: KeyedRateLimiter;
 
   // Metrics
   private requestCount = 0;
@@ -133,6 +136,7 @@ export class RestApiModule implements IModule {
       port: 3000,
       basePath: '/api',
       corsOrigin: '*',
+      rateLimitPerMinute: 120,
     };
 
     this.config = {
@@ -142,6 +146,11 @@ export class RestApiModule implements IModule {
 
     // Use system port if configured and module port is default
     // (system port takes precedence)
+
+    this.rateLimiter = new KeyedRateLimiter({
+      maxRequests: this.config.rateLimitPerMinute,
+      windowMs: 60_000,
+    });
 
     this.registerRoutes();
 
@@ -298,6 +307,22 @@ export class RestApiModule implements IModule {
     const pathname = url.pathname;
     const query = url.searchParams;
     const method = req.method ?? 'GET';
+
+    // ── Rate Limiting Gate ─────────────────────────────────────────────
+    const clientKey = this.getClientKey(req);
+    const rl = this.rateLimiter.tryAcquire(clientKey);
+    res.setHeader('X-RateLimit-Limit', String(rl.limit));
+    res.setHeader('X-RateLimit-Remaining', String(rl.remaining));
+    res.setHeader('X-RateLimit-Reset', String(Math.ceil(rl.resetAt / 1000)));
+    if (!rl.allowed) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.resetAt - Date.now()) / 1000)));
+      this.sendJson(res, 429, {
+        error: 'Too Many Requests',
+        message: `Rate limit exceeded. Try again in ${Math.ceil((rl.resetAt - Date.now()) / 1000)}s`,
+        retryAfter: Math.ceil((rl.resetAt - Date.now()) / 1000),
+      });
+      return;
+    }
 
     // ── Authentication Gate ────────────────────────────────────────────
     const authService = this.deps?.authService;
@@ -624,5 +649,26 @@ export class RestApiModule implements IModule {
 
   getConfig(): ApiConfig {
     return this.config;
+  }
+
+  getRateLimiter(): KeyedRateLimiter {
+    return this.rateLimiter;
+  }
+
+  // ── Internal Helpers ─────────────────────────────────────────────────────
+
+  private getClientKey(req: http.IncomingMessage): string {
+    // Use API key or auth identity as client key for authenticated users;
+    // otherwise fall back to IP address.
+    const apiKey = req.headers['x-api-key'];
+    if (apiKey) return `key:${typeof apiKey === 'string' ? apiKey.slice(0, 8) : 'arr'}`;
+
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+      const ip = typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : forwarded[0];
+      return `ip:${ip}`;
+    }
+
+    return `ip:${req.socket.remoteAddress ?? 'unknown'}`;
   }
 }

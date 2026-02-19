@@ -94,7 +94,7 @@ RAW SIGNAL → INCIDENT → UNDERSTANDING → SAFE ACTION
 ### UI & Integration
 | Module | Description |
 |--------|-------------|
-| `ui.api` | REST API for incidents, approvals, and health |
+| `ui.api` | REST API with rate limiting, Prometheus metrics, health/liveness/readiness probes |
 | `ui.websocket` | Real-time WebSocket event streaming |
 | `ui.dashboard` | Self-contained HTML dashboard with auto-refresh |
 | `openclaw.tools` | OpenClaw AI tool registry bridge |
@@ -150,7 +150,7 @@ npm start -- --cli --operator your-name
 npm test
 ```
 
-667 tests across 196 suites — all passing.
+816 tests across 219 suites — all passing.
 
 ### Type Check
 
@@ -177,12 +177,19 @@ npm run test:check     # Type-check including test files
 | `detector.anomaly` | **Complete** | Z-Score, MAD, IQR, EWMA — real statistical algorithms |
 | `enricher.correlator` | **Complete** | Time + content similarity correlation |
 | `enricher.dedup` | **Complete** | Deduplication with configurable windows |
-| `ui.api` | **Complete** | Real HTTP REST API with JWT + API key auth |
+| `ui.api` | **Complete** | Real HTTP REST API with JWT + API key auth, rate limiting, Prometheus `/metrics`, `/livez`, `/readyz` |
 | `ui.websocket` | **Complete** | Real WebSocket streaming |
 | `ui.dashboard` | **Complete** | Self-contained HTML dashboard |
 | SQLite storage | **Complete** | Persistent storage via `better-sqlite3` (WAL mode, ACID) |
 | JWT + API key auth | **Complete** | `AuthService` with HS256 JWT, constant-time API key comparison |
-| Test suite | **Complete** | 667 tests, 196 suites, 0 failures |
+| Structured logging | **Complete** | JSON/text format, file output, size-based log rotation |
+| Rate limiting | **Complete** | Per-client sliding-window rate limiter, `X-RateLimit-*` headers |
+| Circuit breaker | **Complete** | Circuit breaker + retry with exponential backoff for outbound calls |
+| Prometheus metrics | **Complete** | `/api/metrics` endpoint with module health, process, and custom gauges |
+| LLM resilience | **Complete** | Response cache, retry, circuit breaker, fallback for AI providers |
+| Containerization | **Complete** | Multi-stage Dockerfile, docker-compose, `.dockerignore`, non-root user |
+| CI pipeline | **Complete** | GitHub Actions: lint → build → test (Node 20+22) → Docker build |
+| Test suite | **Complete** | 816 tests, 219 suites, 0 failures |
 
 ### What's Stubbed (interface exists, implementation simulated)
 
@@ -196,20 +203,20 @@ npm run test:check     # Type-check including test files
 | `notifier.pagerduty` | Builds correct payload, calls `fetch` | Needs PagerDuty SDK, event deduplication keys |
 | `notifier.teams` | Builds Adaptive Card, calls `fetch` | Works for simple webhooks; needs Graph API for richer integration |
 | `notifier.email` | Builds HTML email, uses raw SMTP | Needs `nodemailer` or similar for real SMTP with TLS/auth |
-| `enricher.aiSummary` | Template engine fallback only | Needs real LLM integration (see below) |
+| `enricher.aiSummary` | Template fallback + resilient wrapper | Needs real API keys; retry/cache/circuit-breaker already wired |
 
 ### What's Missing Entirely
 
 | Gap | Priority | Implementation Guide |
 |-----|----------|---------------------|
 | ~~**Database**~~ | ~~**High**~~ | **DONE** — `SQLiteStorage` engine implemented via `better-sqlite3`. Supports all 7 `IStorageEngine` methods. Set `storage.engine: sqlite` in config with `options.dbPath`. WAL mode, prepared statements, zero-config. |
-| **LLM Integration** | **High** | Provider interface (`ISummarizer`) exists with `openai` and `anthropic` providers stubbed in `enricher.aiSummary/providers.ts`. Needs real API key handling, streaming, error recovery. See [LLM Integration Guide](#llm-integration-guide). |
+| ~~**LLM Integration**~~ | ~~**High**~~ | **DONE** — `ResilientSummarizer` wraps OpenAI/Anthropic providers with response caching (LRU+TTL), retry with exponential backoff, circuit breaker, and automatic fallback to `TemplateSummarizer`. Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` env vars. |
 | ~~**Authentication**~~ | ~~**High**~~ | **DONE** — JWT bearer tokens (HS256) + static API keys. `AuthService` in `src/core/security/AuthService.ts`. Set `auth.enabled: true` in config or use `OPSPILOT_JWT_SECRET` / `OPSPILOT_API_KEY` env vars. Public paths exempt (e.g. `/api/health`). Both REST API and Dashboard API endpoints protected. |
-| **Containerization** | **Medium** | No Dockerfile, docker-compose, or Helm chart. See [Container Guide](#container-guide). |
-| **Prometheus Metrics** | **Medium** | No `/metrics` endpoint. Modules track internal counters but don't export them. See [Observability Guide](#observability-guide). |
-| **Error Recovery** | **Medium** | No circuit breakers, retry-with-backoff, or dead letter queues for failed deliveries. |
-| **Structured Logging** | **Low** | Logger exists but outputs human-readable text. Needs JSON structured output for production. |
-| **Rate Limiting (API)** | **Low** | EventBus-level rate limits exist but the HTTP API has none. |
+| ~~**Containerization**~~ | ~~**Medium**~~ | **DONE** — Multi-stage `Dockerfile` (node:20-alpine, non-root user, layer caching), `docker-compose.yml` with SQLite volume and health checks, `.dockerignore`, GitHub Actions CI pipeline. |
+| ~~**Prometheus Metrics**~~ | ~~**Medium**~~ | **DONE** — `MetricsCollector` in `src/shared/metrics.ts` exposes `/api/metrics` with module health gauges, process metrics (uptime, heap, RSS), and custom counters in Prometheus text exposition format. |
+| ~~**Error Recovery**~~ | ~~**Medium**~~ | **DONE** — `CircuitBreaker` (closed→open→half-open), `retryWithBackoff()` with jitter, `isRetryableHttpError()`. All wired into AI providers and available for all outbound calls. |
+| ~~**Structured Logging**~~ | ~~**Low**~~ | **DONE** — `Logger` supports JSON/text format, file output, size-based log rotation (`maxFileSize`, `maxFiles`), child loggers, and `close()` lifecycle. |
+| ~~**Rate Limiting (API)**~~ | ~~**Low**~~ | **DONE** — `KeyedRateLimiter` on REST API with per-client sliding window, `X-RateLimit-Limit`/`Remaining`/`Reset` headers, 429 responses. |
 
 ---
 
@@ -269,11 +276,16 @@ The provider interface already exists in `src/modules/enricher.aiSummary/provide
 
 3. **What's already implemented**: prompt construction, JSON response parsing, runbook matching, confidence scoring.
 
-4. **What's needed**:
+4. **What's already implemented (Phase 29)**:
+   - `ResilientSummarizer` wraps providers with cache → circuit breaker → retry → fallback
+   - Response caching (LRU with configurable TTL) to avoid duplicate API calls
+   - Retry with exponential backoff on 429/5xx errors
+   - Circuit breaker (threshold + reset timeout) with automatic fallback to template
+   - Resilience event callbacks for observability
+
+5. **What's still needed**:
    - Streaming support for large responses
    - Token counting / cost tracking
-   - Retry with exponential backoff on 429/500
-   - Response caching to avoid duplicate API calls
    - Embedding-based runbook matching (currently keyword-only)
 
 ---
@@ -324,78 +336,52 @@ auth:
 
 ### Container Guide
 
-```dockerfile
-# Dockerfile
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY tsconfig.json ./
-COPY src/ ./src/
-RUN npm run build
+> **Status: COMPLETE** — Real `Dockerfile` and `docker-compose.yml` are in the project root.
 
-FROM node:20-alpine
-WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY package.json config/ ./config/
-EXPOSE 3000 3001 3002
-CMD ["node", "dist/main.js"]
+```bash
+# Build and run with Docker Compose
+docker compose up -d --build
+
+# Follow logs
+docker compose logs -f
+
+# Check health
+curl http://localhost:3000/api/health
+curl http://localhost:3000/api/livez
+curl http://localhost:3000/api/readyz
+
+# Prometheus metrics
+curl http://localhost:3000/api/metrics
+
+# Stop
+docker compose down
 ```
 
-```yaml
-# docker-compose.yml
-services:
-  opspilot:
-    build: .
-    ports:
-      - "3000:3000"   # REST API
-      - "3001:3001"   # WebSocket
-      - "3002:3002"   # Dashboard
-    environment:
-      - OPSPILOT_SYSTEM_ENVIRONMENT=production
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    volumes:
-      - ./config:/app/config
-      - ./logs:/app/logs
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: opspilot
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-volumes:
-  pgdata:
-```
+The Dockerfile uses a multi-stage build (builder → production), runs as a non-root `opspilot` user, prunes dev dependencies, and includes a `HEALTHCHECK` directive. SQLite data is persisted via the `opspilot-data` Docker volume.
 
 ---
 
 ### Observability Guide
 
-To export Prometheus metrics, add a `/metrics` endpoint to `ui.api`:
+> **Status: COMPLETE** — Prometheus metrics are exposed at `GET /api/metrics`.
 
-```typescript
-// Each module already tracks internal counters via health().details
-// Collect them and format as Prometheus text exposition:
-private serveMetrics(res: http.ServerResponse): void {
-  const lines: string[] = [];
-  const healths = this.deps.getModuleHealths();
-  for (const [id, h] of Object.entries(healths)) {
-    const prefix = id.replace(/\./g, '_');
-    if (h.details) {
-      for (const [k, v] of Object.entries(h.details)) {
-        if (typeof v === 'number') {
-          lines.push(`opspilot_${prefix}_${k} ${v}`);
-        }
-      }
-    }
-  }
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end(lines.join('\n') + '\n');
-}
+The `MetricsCollector` class (`src/shared/metrics.ts`) automatically collects:
+- Module health status as Prometheus gauges
+- Process metrics: uptime, heap used/total, RSS, external memory
+- Custom counters (e.g. HTTP request counts by method + status)
+
+```bash
+# Scrape metrics
+curl http://localhost:3000/api/metrics
+
+# Example output:
+# HELP opspilot_module_healthy Module health status (1=healthy, 0=unhealthy)
+# TYPE opspilot_module_healthy gauge
+opspilot_module_healthy{module="detector.regex"} 1
+opspilot_module_healthy{module="enricher.aiSummary"} 1
+# HELP opspilot_process_uptime_seconds Process uptime
+# TYPE opspilot_process_uptime_seconds gauge
+opspilot_process_uptime_seconds 3842.71
 ```
 
 ## Configuration
@@ -442,8 +428,14 @@ Environment variables override config values using the `OPSPILOT_*` prefix.
 ## Project Structure
 
 ```
+├── .github/
+│   └── workflows/
+│       └── ci.yml             # GitHub Actions CI pipeline
 ├── config/
 │   └── default.yaml          # Default configuration
+├── Dockerfile                 # Multi-stage container build
+├── docker-compose.yml         # Container orchestration
+├── .dockerignore              # Docker build exclusions
 ├── src/
 │   ├── core/                  # Core subsystems (bus, config, storage, security)
 │   │   ├── bus/               # EventBus implementation
@@ -466,7 +458,7 @@ Environment variables override config values using the `OPSPILOT_*` prefix.
 │   ├── shared/                # Shared types and utilities
 │   ├── cli/                   # Interactive approval CLI
 │   └── main.ts                # Entry point
-├── tests/                     # Test suites (39 test files, 667 tests)
+├── tests/                     # Test suites (45 test files, 816 tests)
 └── .docs/                     # Architecture documentation
 ```
 
@@ -480,6 +472,8 @@ Environment variables override config values using the `OPSPILOT_*` prefix.
 | Testing | Node.js built-in test runner (`node:test` + `node:assert/strict`) |
 | Build | `tsc` (target ES2022, CommonJS) |
 | Dependencies | 4 production deps (`ajv`, `yaml`, `better-sqlite3`, `jsonwebtoken`) |
+| Containerization | Multi-stage Dockerfile, docker-compose, non-root |
+| CI/CD | GitHub Actions (Node 20+22, Docker build on main) |
 
 ## License
 

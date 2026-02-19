@@ -36,10 +36,17 @@ All actions must be proposed, explained, and approved before execution. Approval
 
 ## Current Status
 
-Working architecture with 27 modules across all categories. Core framework complete with **667 passing tests across 196 suites**. Production-ready features include:
+Working architecture with 27 modules across all categories. Core framework complete with **816 passing tests across 219 suites**. Production-ready features include:
 
 - **SQLite persistent storage** via `better-sqlite3` (WAL mode, prepared statements, ACID)
 - **JWT + API key authentication** with role-based access (admin, operator, viewer)
 - **Statistical anomaly detection** with 4 methods (Z-Score, MAD, IQR, EWMA)
+- **Structured logging** with JSON/text format, file output, and size-based rotation
+- **Rate limiting** with per-client sliding window and `X-RateLimit-*` headers
+- **Circuit breaker + retry** with exponential backoff for outbound calls
+- **Prometheus metrics** at `/api/metrics` with module health and process gauges
+- **LLM resilience** — response cache, retry, circuit breaker, fallback for AI providers
+- **Containerization** — multi-stage Dockerfile, docker-compose, non-root user
+- **CI pipeline** — GitHub Actions: build → test on Node 20+22 → Docker build
 
-Remaining production gaps: LLM integration, containerization, Prometheus metrics, structured logging.
+Remaining production gaps: real LLM API keys, Helm chart, PostgreSQL engine.

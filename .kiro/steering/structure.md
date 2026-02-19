@@ -3,7 +3,13 @@
 ## Top-Level Layout
 
 ```
+├── .github/
+│   └── workflows/
+│       └── ci.yml      # GitHub Actions CI pipeline
 ├── config/              # YAML configuration files
+├── Dockerfile           # Multi-stage container build
+├── docker-compose.yml   # Container orchestration
+├── .dockerignore        # Docker build exclusions
 ├── src/                 # All TypeScript source code
 │   ├── core/           # Core framework (never contains business logic)
 │   ├── modules/        # All feature modules (27 modules)
@@ -11,7 +17,7 @@
 │   ├── cli/            # Interactive approval CLI
 │   ├── main.ts         # Application entry point
 │   └── index.ts        # Public API exports
-├── tests/              # Test suites (667 tests, 196 suites, 39 test files)
+├── tests/              # Test suites (816 tests, 219 suites, 45 test files)
 ├── dist/               # Compiled JavaScript output (gitignored)
 ├── logs/               # Runtime log files
 └── .docs/              # Architecture documentation
@@ -70,7 +76,11 @@ Module naming convention: `<category>.<name>`
 shared/
 ├── errors.ts           # Typed error hierarchy
 ├── events.ts           # Event payload types
-├── logger.ts           # Structured logger
+├── logger.ts           # Structured logger (JSON/text, file output, rotation)
+├── rate-limiter.ts     # Sliding-window rate limiter (single + keyed)
+├── circuit-breaker.ts  # Circuit breaker (closed → open → half-open)
+├── retry.ts            # Retry with exponential backoff + jitter
+├── metrics.ts          # Prometheus metrics collector
 ├── utils.ts            # generateId, sleep, deepFreeze
 └── index.ts            # Barrel export
 ```
@@ -89,7 +99,7 @@ tests/
 ├── auth-integration.test.ts    # Auth integration tests (REST API + Dashboard)
 ├── module-*.test.ts            # Module-specific tests
 ├── integration.test.ts         # End-to-end pipeline tests
-└── ... (39 test files total)
+└── ... (45 test files total)
 ```
 
 Test naming: `<feature>.test.ts`

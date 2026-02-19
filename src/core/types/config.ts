@@ -61,4 +61,10 @@ export interface LoggingConfig {
 
   /** File path when `output` is `'file'`. */
   file?: string;
+
+  /** Max file size in bytes before rotation. Default: 10485760 (10 MB). */
+  maxFileSize?: number;
+
+  /** Max number of rotated files to keep. Default: 5. */
+  maxFiles?: number;
 }

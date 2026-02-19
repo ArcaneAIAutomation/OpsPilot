@@ -494,5 +494,8 @@ auth:
 
 logging:
   level: info
-  format: text
-  output: console
+  format: text          # 'json' for production (structured), 'text' for development (human-readable)
+  output: console        # 'file' to write to disk with rotation
+  # file: ./logs/opspilot.log
+  # maxFileSize: 10485760  # 10 MB — rotate when file exceeds this size
+  # maxFiles: 5            # keep up to 5 rotated files (.1 through .5)

@@ -118,6 +118,10 @@ export class Application {
         level: this.config.logging?.level ?? 'info',
         format: this.config.logging?.format ?? 'text',
         prefix: 'OpsPilot',
+        output: this.config.logging?.output ?? 'console',
+        filePath: this.config.logging?.file,
+        maxFileSize: this.config.logging?.maxFileSize,
+        maxFiles: this.config.logging?.maxFiles,
       });
 
       this.logger.info('Starting OpsPilot', {

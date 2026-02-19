@@ -51,6 +51,8 @@ const ROOT_SCHEMA = {
         format: { type: 'string', enum: ['json', 'text'] },
         output: { type: 'string', enum: ['console', 'file'] },
         file: { type: 'string' },
+        maxFileSize: { type: 'integer', minimum: 1024 },
+        maxFiles: { type: 'integer', minimum: 1, maximum: 100 },
       },
       additionalProperties: false,
     },

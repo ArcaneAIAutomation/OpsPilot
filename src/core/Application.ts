@@ -29,6 +29,8 @@ import { FileStorage } from './storage/FileStorage';
 import { SQLiteStorage } from './storage/SQLiteStorage';
 import { AuditLogger } from './security/AuditLogger';
 import { ApprovalGate } from './security/ApprovalGate';
+import { AuthService } from './security/AuthService';
+import { AuthConfig } from './types/auth';
 import { ToolRegistry } from './openclaw/ToolRegistry';
 import { Logger } from '../shared/logger';
 import { ILogger } from './types/module';
@@ -54,6 +56,7 @@ export class Application {
   private storage!: IStorageEngine;
   private auditLogger!: IAuditLogger;
   private approvalGate!: IApprovalGate;
+  private authService!: AuthService;
   private toolRegistry!: IToolRegistry;
   private moduleLoader!: ModuleLoader;
   private moduleRegistry!: ModuleRegistry;
@@ -143,6 +146,9 @@ export class Application {
         this.auditLogger,
         this.logger,
       );
+
+      // Authentication service
+      this.authService = this.createAuthService();
 
       // OpenClaw tool registry
       this.toolRegistry = new ToolRegistry(
@@ -326,6 +332,10 @@ export class Application {
     return this.logger;
   }
 
+  getAuthService(): AuthService {
+    return this.authService;
+  }
+
   // ── Internal ───────────────────────────────────────────────────────────
 
   /**
@@ -393,5 +403,42 @@ export class Application {
 
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
+  }
+
+  /**
+   * Build the AuthService from config and environment variables.
+   *
+   * Auth config can come from:
+   *   - `auth` section in the YAML config
+   *   - Environment variables: `OPSPILOT_JWT_SECRET`, `OPSPILOT_API_KEY`
+   */
+  private createAuthService(): AuthService {
+    const rawAuth = (this.config as unknown as Record<string, unknown>).auth as
+      | Partial<AuthConfig>
+      | undefined;
+
+    // Environment variable overrides
+    const envSecret = process.env['OPSPILOT_JWT_SECRET'];
+    const envApiKey = process.env['OPSPILOT_API_KEY'];
+
+    const authConfig: AuthConfig = {
+      enabled: rawAuth?.enabled ?? false,
+      jwtSecret: rawAuth?.jwtSecret ?? envSecret,
+      jwtExpiresIn: rawAuth?.jwtExpiresIn ?? '8h',
+      jwtIssuer: rawAuth?.jwtIssuer ?? 'opspilot',
+      apiKeys: [...(rawAuth?.apiKeys ?? [])],
+      publicPaths: rawAuth?.publicPaths ?? ['/api/health'],
+    };
+
+    // If env API key is provided, add it as an admin key
+    if (envApiKey) {
+      authConfig.apiKeys!.push({
+        label: 'env-api-key',
+        key: envApiKey,
+        role: 'admin',
+      });
+    }
+
+    return new AuthService(authConfig, this.logger);
   }
 }

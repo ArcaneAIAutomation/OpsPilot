@@ -81,6 +81,7 @@ async function main(): Promise<void> {
       approvalGate: app.getApprovalGate(),
       auditLogger: app.getAuditLogger(),
       toolRegistry: app.getToolRegistry(),
+      authService: app.getAuthService(),
       getModuleHealths: () => {
         const healths: Record<string, any> = {};
         for (const id of app.getModuleRegistry().getRegisteredIds()) {
@@ -91,6 +92,7 @@ async function main(): Promise<void> {
       },
     });
     dashboardModule.setDependencies({
+      authService: app.getAuthService(),
       getModuleHealths: () => {
         const healths: Record<string, any> = {};
         for (const id of app.getModuleRegistry().getRegisteredIds()) {

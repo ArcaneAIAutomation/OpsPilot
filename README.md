@@ -202,7 +202,7 @@ npm run test:check     # Type-check including test files
 |-----|----------|---------------------|
 | ~~**Database**~~ | ~~**High**~~ | **DONE** — `SQLiteStorage` engine implemented via `better-sqlite3`. Supports all 7 `IStorageEngine` methods. Set `storage.engine: sqlite` in config with `options.dbPath`. WAL mode, prepared statements, zero-config. |
 | **LLM Integration** | **High** | Provider interface (`ISummarizer`) exists with `openai` and `anthropic` providers stubbed in `enricher.aiSummary/providers.ts`. Needs real API key handling, streaming, error recovery. See [LLM Integration Guide](#llm-integration-guide). |
-| **Authentication** | **High** | REST API (`ui.api`) has zero auth. Needs JWT or API key middleware on all endpoints. See [Auth Implementation Guide](#auth-implementation-guide). |
+| ~~**Authentication**~~ | ~~**High**~~ | **DONE** — JWT bearer tokens (HS256) + static API keys. `AuthService` in `src/core/security/AuthService.ts`. Set `auth.enabled: true` in config or use `OPSPILOT_JWT_SECRET` / `OPSPILOT_API_KEY` env vars. Public paths exempt (e.g. `/api/health`). Both REST API and Dashboard API endpoints protected. |
 | **Containerization** | **Medium** | No Dockerfile, docker-compose, or Helm chart. See [Container Guide](#container-guide). |
 | **Prometheus Metrics** | **Medium** | No `/metrics` endpoint. Modules track internal counters but don't export them. See [Observability Guide](#observability-guide). |
 | **Error Recovery** | **Medium** | No circuit breakers, retry-with-backoff, or dead letter queues for failed deliveries. |
@@ -278,22 +278,45 @@ The provider interface already exists in `src/modules/enricher.aiSummary/provide
 
 ### Auth Implementation Guide
 
-The REST API in `src/modules/ui.api/index.ts` has no authentication. To add JWT auth:
+> **Status: COMPLETE** — JWT + API key authentication is fully implemented.
 
-1. **Install**: `npm install jsonwebtoken`
-2. **Add middleware** in the `handleRequest` method before routing:
-   ```typescript
-   private authenticate(req: http.IncomingMessage): boolean {
-     const auth = req.headers.authorization;
-     if (!auth?.startsWith('Bearer ')) return false;
-     try {
-       jwt.verify(auth.slice(7), this.config.jwtSecret);
-       return true;
-     } catch { return false; }
-   }
-   ```
-3. **Add config**: `jwtSecret`, `authEnabled` to the `ui.api` schema
-4. **Skip auth** for health endpoints if desired
+**Quick start (environment variables):**
+```bash
+# Set a JWT secret to enable token-based auth
+export OPSPILOT_JWT_SECRET="your-256-bit-secret-here"
+
+# Or use a static API key
+export OPSPILOT_API_KEY="sk-your-api-key-here"
+```
+
+Then enable auth in config:
+```yaml
+# config/default.yaml
+auth:
+  enabled: true
+  # jwtSecret: "..."           # or set OPSPILOT_JWT_SECRET env var
+  # jwtExpiresIn: "8h"         # token lifetime
+  # jwtIssuer: "opspilot"      # JWT issuer claim
+  publicPaths:
+    - /api/health              # exempt from auth (load balancer probes)
+  apiKeys:
+    - label: ci-pipeline
+      key: sk-your-key-here
+      role: operator           # admin | operator | viewer
+```
+
+**Authentication methods (checked in order):**
+1. `Authorization: Bearer <jwt>` — JWT with `sub` and `role` claims (HS256)
+2. `X-API-Key: <key>` — static API key from config
+
+**Roles:** `admin` (full access), `operator` (read + approve/deny), `viewer` (read-only)
+
+**Architecture:**
+- `AuthService` → `src/core/security/AuthService.ts` — core auth logic
+- Auth types → `src/core/types/auth.ts` — `IAuthService`, `AuthIdentity`, `AuthConfig`
+- Middleware integrated into both `ui.api` and `ui.dashboard` `handleRequest()`
+- Constant-time API key comparison (HMAC-based) to prevent timing attacks
+- `AuditLogger` can record auth events
 
 ---
 

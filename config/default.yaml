@@ -469,6 +469,26 @@ storage:
   # options:
   #   dbPath: ./data/opspilot.db
 
+# ── Authentication ──────────────────────────────────────────────────────────
+# When enabled, all API endpoints require a valid Bearer JWT or X-API-Key
+# header (except paths listed in publicPaths).
+#
+# Quick start: set OPSPILOT_JWT_SECRET and/or OPSPILOT_API_KEY env vars.
+auth:
+  enabled: false
+  # jwtSecret: "change-me-to-a-256-bit-secret"  # or set OPSPILOT_JWT_SECRET env var
+  # jwtExpiresIn: "8h"
+  # jwtIssuer: "opspilot"
+  # publicPaths:
+  #   - /api/health
+  # apiKeys:
+  #   - label: ci-pipeline
+  #     key: sk-your-api-key-here
+  #     role: operator
+  #   - label: monitoring
+  #     key: sk-monitoring-key
+  #     role: viewer
+
 # Optional directory for external plugin modules (dynamic loading at startup)
 # pluginsDir: ./plugins
 

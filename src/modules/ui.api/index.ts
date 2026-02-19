@@ -32,6 +32,7 @@ import {
 import { IStorageEngine } from '../../core/types/storage';
 import { IApprovalGate, IAuditLogger, ApprovalStatus } from '../../core/types/security';
 import { IToolRegistry } from '../../core/types/openclaw';
+import { IAuthService, AuthIdentity } from '../../core/types/auth';
 import configSchema from './schema.json';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -63,6 +64,7 @@ export interface ApiDependencies {
   auditLogger: IAuditLogger;
   toolRegistry: IToolRegistry;
   getModuleHealths: () => Record<string, ModuleHealth>;
+  authService?: IAuthService;
 }
 
 // ── Stored types imported by convention ────────────────────────────────────
@@ -283,7 +285,7 @@ export class RestApiModule implements IModule {
     // CORS headers
     res.setHeader('Access-Control-Allow-Origin', this.config.corsOrigin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
 
     // Handle preflight
     if (req.method === 'OPTIONS') {
@@ -296,6 +298,25 @@ export class RestApiModule implements IModule {
     const pathname = url.pathname;
     const query = url.searchParams;
     const method = req.method ?? 'GET';
+
+    // ── Authentication Gate ────────────────────────────────────────────
+    const authService = this.deps?.authService;
+    if (authService?.enabled) {
+      if (!authService.isPublicPath(pathname)) {
+        const identity = authService.authenticate(
+          req.headers as Record<string, string | string[] | undefined>,
+        );
+        if (!identity) {
+          this.sendJson(res, 401, {
+            error: 'Unauthorized',
+            message: 'Valid Bearer token or X-API-Key required',
+          });
+          return;
+        }
+        // Attach identity for downstream handlers
+        (req as unknown as Record<string, unknown>).__authIdentity = identity;
+      }
+    }
 
     const match = this.matchRoute(method, pathname);
     if (match) {

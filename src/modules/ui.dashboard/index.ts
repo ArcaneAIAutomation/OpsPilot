@@ -28,6 +28,7 @@ import {
   ModuleHealth,
 } from '../../core/types/module';
 import { OpsPilotEvent, EventSubscription } from '../../core/types/events';
+import { IAuthService } from '../../core/types/auth';
 import configSchema from './schema.json';
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -52,6 +53,7 @@ const DEFAULTS: DashboardConfig = {
 
 export interface DashboardDependencies {
   getModuleHealths: () => Record<string, ModuleHealth>;
+  authService?: IAuthService;
 }
 
 // ── Setup checklist item ───────────────────────────────────────────────────
@@ -241,11 +243,30 @@ export class DashboardModule implements IModule {
     // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();
       return;
+    }
+
+    // ── Authentication Gate (for API endpoints only) ───────────────────
+    const authService = this.deps?.authService;
+    if (authService?.enabled && path.startsWith('/api/')) {
+      if (!authService.isPublicPath(path)) {
+        const identity = authService.authenticate(
+          req.headers as Record<string, string | string[] | undefined>,
+        );
+        if (!identity) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Unauthorized',
+            message: 'Valid Bearer token or X-API-Key required',
+          }));
+          return;
+        }
+      }
     }
 
     if (path === '/' || path === '/index.html') {
@@ -512,12 +533,17 @@ export class DashboardModule implements IModule {
     });
 
     // -- Auth --
+    const authEnabled = this.deps?.authService?.enabled ?? false;
     items.push({
       id: 'auth',
       label: 'API Authentication',
-      status: 'missing',
-      detail: 'REST API (ui.api) has no authentication middleware. All endpoints are open.',
-      guide: 'Add JWT or API-key middleware to ui.api handleRequest(). See README \u2192 Auth Implementation Guide.',
+      status: authEnabled ? 'done' : 'missing',
+      detail: authEnabled
+        ? 'JWT + API key authentication enabled on REST API and Dashboard API endpoints.'
+        : 'REST API and Dashboard API have no authentication. All endpoints are open.',
+      guide: authEnabled
+        ? ''
+        : 'Set auth.enabled: true in config with jwtSecret or apiKeys. Or set OPSPILOT_JWT_SECRET / OPSPILOT_API_KEY env vars. See README \u2192 Auth Implementation Guide.',
     });
 
     // -- Connectors: real vs stubbed --

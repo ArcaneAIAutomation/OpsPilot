@@ -34,6 +34,7 @@ import { IApprovalGate, IAuditLogger, ApprovalStatus } from '../../core/types/se
 import { IToolRegistry } from '../../core/types/openclaw';
 import { IAuthService, AuthIdentity } from '../../core/types/auth';
 import { KeyedRateLimiter, RateLimitResult } from '../../shared/rate-limiter';
+import { MetricsCollector } from '../../shared/metrics';
 import configSchema from './schema.json';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -113,6 +114,7 @@ export class RestApiModule implements IModule {
   private routes: Route[] = [];
   private deps!: ApiDependencies;
   private rateLimiter!: KeyedRateLimiter;
+  private metricsCollector!: MetricsCollector;
 
   // Metrics
   private requestCount = 0;
@@ -151,6 +153,8 @@ export class RestApiModule implements IModule {
       maxRequests: this.config.rateLimitPerMinute,
       windowMs: 60_000,
     });
+
+    this.metricsCollector = new MetricsCollector({ prefix: 'opspilot' });
 
     this.registerRoutes();
 
@@ -261,6 +265,9 @@ export class RestApiModule implements IModule {
     );
     this.addRoute('GET', `${base}/tools`, (req, res, params, query) =>
       this.handleTools(req, res, params, query),
+    );
+    this.addRoute('GET', `${base}/metrics`, (req, res, params, query) =>
+      this.handleMetrics(req, res, params, query),
     );
   }
 
@@ -608,6 +615,36 @@ export class RestApiModule implements IModule {
         tags: t.tags,
       })),
     });
+  }
+
+  private async handleMetrics(
+    _req: http.IncomingMessage,
+    res: http.ServerResponse,
+    _params: Record<string, string>,
+    _query: URLSearchParams,
+  ): Promise<void> {
+    const moduleHealths = this.deps?.getModuleHealths?.() ?? {};
+
+    // Add API-specific metrics
+    this.metricsCollector.clearCustomMetrics();
+    this.metricsCollector.registerMetric({
+      name: 'http_requests_total',
+      type: 'counter',
+      help: 'Total HTTP requests served',
+      value: this.requestCount,
+    });
+    this.metricsCollector.registerMetric({
+      name: 'http_errors_total',
+      type: 'counter',
+      help: 'Total HTTP errors',
+      value: this.errorCount,
+    });
+
+    const body = this.metricsCollector.collect(moduleHealths);
+    res.writeHead(200, {
+      'Content-Type': 'text/plain; version=0.0.4; charset=utf-8',
+    });
+    res.end(body);
   }
 
   // ── Utility ──────────────────────────────────────────────────────────────

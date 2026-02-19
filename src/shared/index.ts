@@ -5,3 +5,4 @@ export * from './utils';
 export * from './rate-limiter';
 export * from './circuit-breaker';
 export * from './retry';
+export * from './metrics';

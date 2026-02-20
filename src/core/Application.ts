@@ -417,9 +417,7 @@ export class Application {
    *   - Environment variables: `OPSPILOT_JWT_SECRET`, `OPSPILOT_API_KEY`
    */
   private createAuthService(): AuthService {
-    const rawAuth = (this.config as unknown as Record<string, unknown>).auth as
-      | Partial<AuthConfig>
-      | undefined;
+    const rawAuth = this.config.auth as Partial<AuthConfig> | undefined;
 
     // Environment variable overrides
     const envSecret = process.env['OPSPILOT_JWT_SECRET'];

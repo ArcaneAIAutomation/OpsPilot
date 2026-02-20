@@ -17,6 +17,9 @@ export interface OpsPilotConfig {
 
   /** Logging preferences. */
   logging?: LoggingConfig;
+
+  /** Authentication settings. */
+  auth?: import('./auth').AuthConfig;
 }
 
 export interface SystemConfig {

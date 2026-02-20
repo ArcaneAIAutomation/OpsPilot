@@ -56,6 +56,30 @@ const ROOT_SCHEMA = {
       },
       additionalProperties: false,
     },
+    auth: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean' },
+        jwtSecret: { type: 'string' },
+        jwtExpiresIn: { type: 'string' },
+        jwtIssuer: { type: 'string' },
+        publicPaths: { type: 'array', items: { type: 'string' } },
+        apiKeys: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['label', 'key', 'role'],
+            properties: {
+              label: { type: 'string' },
+              key: { type: 'string' },
+              role: { type: 'string' },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      additionalProperties: false,
+    },
   },
   additionalProperties: false,
 };

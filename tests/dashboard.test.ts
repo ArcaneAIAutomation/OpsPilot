@@ -260,4 +260,144 @@ describe('ui.dashboard', () => {
       assert.ok(html.includes('5000')); // refreshIntervalMs from config
     });
   });
+
+  // ── New API Endpoints ────────────────────────────────────────────────
+
+  describe('New API Endpoints', () => {
+    beforeEach(async () => {
+      dashboard.setDependencies({
+        getModuleHealths: () => ({
+          'connector.fileTail': { status: 'healthy', lastCheck: new Date() },
+          'detector.regex': { status: 'healthy', lastCheck: new Date() },
+          'enricher.aiSummary': { status: 'healthy', lastCheck: new Date() },
+        }),
+      });
+      await dashboard.initialize(dashboardContext(infra));
+      await dashboard.start();
+    });
+
+    it('serves config summary at /api/config/current', async () => {
+      const port = getPort(dashboard);
+      const res = await fetchDashboard(port, '/api/config/current');
+      assert.equal(res.status, 200);
+      const data = JSON.parse(res.body);
+      assert.ok(data.system);
+      assert.equal(typeof data.system.platform, 'string');
+      assert.equal(typeof data.system.nodeVersion, 'string');
+      assert.equal(typeof data.system.cpus, 'number');
+      assert.ok(data.system.memory);
+      assert.equal(typeof data.system.memory.usedPct, 'number');
+      assert.ok(data.storage);
+      assert.ok(data.auth);
+      assert.equal(typeof data.auth.enabled, 'boolean');
+      assert.ok(data.modules);
+      assert.equal(typeof data.modules.total, 'number');
+    });
+
+    it('serves environment detection at /api/config/env', async () => {
+      const port = getPort(dashboard);
+      const res = await fetchDashboard(port, '/api/config/env');
+      assert.equal(res.status, 200);
+      const envVars = JSON.parse(res.body);
+      assert.ok(Array.isArray(envVars));
+      assert.ok(envVars.length > 0);
+      // Each entry has name, set, purpose, category
+      const first = envVars[0];
+      assert.equal(typeof first.name, 'string');
+      assert.equal(typeof first.set, 'boolean');
+      assert.equal(typeof first.purpose, 'string');
+      assert.equal(typeof first.category, 'string');
+    });
+
+    it('serves topology at /api/topology', async () => {
+      const port = getPort(dashboard);
+      const res = await fetchDashboard(port, '/api/topology');
+      assert.equal(res.status, 200);
+      const topo = JSON.parse(res.body);
+      assert.ok(Array.isArray(topo));
+      // Should have entries for the modules we set in deps
+      assert.ok(topo.length >= 1);
+      const node = topo[0];
+      assert.ok(node.id);
+      assert.ok(node.type);
+      assert.ok(node.status);
+      assert.ok(node.events);
+      assert.ok(Array.isArray(node.events.publishes));
+      assert.ok(Array.isArray(node.events.subscribes));
+    });
+
+    it('serves setup checklist at /api/setup', async () => {
+      const port = getPort(dashboard);
+      const res = await fetchDashboard(port, '/api/setup');
+      assert.equal(res.status, 200);
+      const items = JSON.parse(res.body);
+      assert.ok(Array.isArray(items));
+      assert.ok(items.length > 0);
+      // Verify enhanced checklist format
+      const item = items[0];
+      assert.ok(item.id);
+      assert.ok(item.label);
+      assert.ok(item.category);
+      assert.ok(item.impact);
+      assert.ok(['done', 'stub', 'missing'].includes(item.status));
+    });
+
+    it('serves setup HTML at /setup', async () => {
+      const port = getPort(dashboard);
+      const res = await fetchDashboard(port, '/setup');
+      assert.equal(res.status, 200);
+      assert.ok(res.body.includes('<!DOCTYPE html>'));
+      assert.ok(res.body.includes('Configuration'));
+      assert.ok(res.body.includes('Auto-Detection'));
+    });
+  });
+
+  // ── Setup Checklist ──────────────────────────────────────────────────
+
+  describe('Setup Checklist', () => {
+    it('includes core items always marked done', async () => {
+      dashboard.setDependencies({ getModuleHealths: () => ({}) });
+      await dashboard.initialize(dashboardContext(infra));
+
+      const items = dashboard.buildSetupChecklist();
+      const core = items.find((i) => i.id === 'core');
+      assert.ok(core);
+      assert.equal(core!.status, 'done');
+      assert.equal(core!.category, 'core');
+      assert.equal(core!.impact, 'critical');
+
+      const safety = items.find((i) => i.id === 'safety');
+      assert.ok(safety);
+      assert.equal(safety!.status, 'done');
+    });
+
+    it('marks auth as missing when not enabled', async () => {
+      dashboard.setDependencies({ getModuleHealths: () => ({}) });
+      await dashboard.initialize(dashboardContext(infra));
+
+      const items = dashboard.buildSetupChecklist();
+      const auth = items.find((i) => i.id === 'auth');
+      assert.ok(auth);
+      assert.equal(auth!.status, 'missing');
+      assert.equal(auth!.category, 'infra');
+      assert.ok(auth!.envVars);
+      assert.ok(auth!.envVars!.includes('OPSPILOT_JWT_SECRET'));
+    });
+
+    it('populates config paths and env vars', async () => {
+      dashboard.setDependencies({
+        getModuleHealths: () => ({
+          'enricher.aiSummary': { status: 'healthy', lastCheck: new Date() },
+        }),
+      });
+      await dashboard.initialize(dashboardContext(infra));
+
+      const items = dashboard.buildSetupChecklist();
+      const llm = items.find((i) => i.id === 'llm');
+      assert.ok(llm);
+      assert.ok(llm!.configPath);
+      assert.ok(llm!.envVars);
+      assert.ok(llm!.envVars!.includes('OPENAI_API_KEY'));
+    });
+  });
 });

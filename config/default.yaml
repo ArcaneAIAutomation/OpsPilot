@@ -427,14 +427,29 @@ modules:
     filterPattern: ""
 
   # ── Email Notifier ───────────────────────────────────────────────────
-  # Sends formatted email notifications via SMTP.
+  # Sends email notifications via OAuth 2.0 (Gmail / Microsoft Graph)
+  # or legacy SMTP.  OAuth is the default transport — set your client
+  # credentials and refresh token below, or via environment variables.
   notifier.email:
     enabled: false
-    smtpHost: ""                   # Required — SMTP server hostname
+    transport: oauth               # "oauth" (default) or "smtp"
+
+    # ── OAuth 2.0 ──────────────────────────────────────────────────────
+    oauth:
+      provider: google             # "google" (Gmail API) or "microsoft" (Graph API)
+      clientId: ""                 # Env: OPSPILOT_EMAIL_CLIENT_ID
+      clientSecret: ""             # Env: OPSPILOT_EMAIL_CLIENT_SECRET
+      refreshToken: ""             # Env: OPSPILOT_EMAIL_REFRESH_TOKEN
+      tenantId: common             # Microsoft only — Azure AD tenant ID
+      userId: ""                   # Microsoft only — send as user (e.g. user@domain.com)
+
+    # ── Legacy SMTP (only when transport: smtp) ─────────────────────────
+    smtpHost: ""
     smtpPort: 587
     secure: false
     username: ""
     password: ""
+
     from: "opspilot@localhost"
     to: []                         # Required — recipient email addresses
     subjectPrefix: "[OpsPilot]"

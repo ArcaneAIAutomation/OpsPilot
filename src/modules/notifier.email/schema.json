@@ -7,9 +7,54 @@
       "type": "boolean",
       "default": true
     },
+    "transport": {
+      "type": "string",
+      "enum": ["oauth", "smtp"],
+      "default": "oauth",
+      "description": "Email transport: 'oauth' (Gmail / Microsoft Graph API) or 'smtp' (legacy)."
+    },
+    "oauth": {
+      "type": "object",
+      "description": "OAuth 2.0 configuration (used when transport = 'oauth').",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["google", "microsoft"],
+          "default": "google",
+          "description": "OAuth provider: 'google' (Gmail API) or 'microsoft' (Graph API)."
+        },
+        "clientId": {
+          "type": "string",
+          "default": "",
+          "description": "OAuth 2.0 Client ID. Env: OPSPILOT_EMAIL_CLIENT_ID"
+        },
+        "clientSecret": {
+          "type": "string",
+          "default": "",
+          "description": "OAuth 2.0 Client Secret. Env: OPSPILOT_EMAIL_CLIENT_SECRET"
+        },
+        "refreshToken": {
+          "type": "string",
+          "default": "",
+          "description": "OAuth 2.0 Refresh Token. Env: OPSPILOT_EMAIL_REFRESH_TOKEN"
+        },
+        "tenantId": {
+          "type": "string",
+          "default": "common",
+          "description": "Microsoft Azure AD Tenant ID (Microsoft only)."
+        },
+        "userId": {
+          "type": "string",
+          "default": "",
+          "description": "Microsoft Graph: send as specific user (e.g. user@domain.com). Leave empty for /me."
+        }
+      },
+      "additionalProperties": false
+    },
     "smtpHost": {
       "type": "string",
-      "description": "SMTP server hostname."
+      "default": "",
+      "description": "SMTP server hostname (used when transport = 'smtp')."
     },
     "smtpPort": {
       "type": "integer",
@@ -72,9 +117,9 @@
       "type": "integer",
       "minimum": 1000,
       "default": 30000,
-      "description": "SMTP connection timeout in ms."
+      "description": "Request timeout in milliseconds."
     }
   },
-  "required": ["smtpHost", "to"],
+  "required": ["to"],
   "additionalProperties": false
 }

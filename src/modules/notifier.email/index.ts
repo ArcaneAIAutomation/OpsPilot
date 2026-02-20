@@ -1,14 +1,15 @@
 // ---------------------------------------------------------------------------
-// OpsPilot — notifier.email (SMTP Email Notifier)
+// OpsPilot — notifier.email (Email Notifier — OAuth + SMTP)
 // ---------------------------------------------------------------------------
-// Sends formatted email notifications via SMTP. Zero external
-// dependencies — uses Node.js net.Socket (+ tls for STARTTLS / implicit
-// TLS) to speak SMTP directly. The sendEmail() method is public so tests
-// can override it without network access.
+// Sends formatted email notifications via OAuth 2.0 APIs (Google Gmail,
+// Microsoft Graph) or legacy SMTP. Zero external dependencies — uses
+// Node.js built-in https/net/tls modules.
 //
 // Features:
-//   - Minimal SMTP client (EHLO → AUTH PLAIN → MAIL FROM → RCPT TO → DATA)
-//   - STARTTLS upgrade and implicit TLS (port 465)
+//   - OAuth 2.0 with automatic token refresh (Google & Microsoft)
+//   - Google Gmail API (users.messages.send)
+//   - Microsoft Graph API (/me/sendMail or /users/{userId}/sendMail)
+//   - Legacy SMTP fallback (EHLO → AUTH PLAIN → MAIL FROM → RCPT TO → DATA)
 //   - Severity-based subject tags and HTML body colour coding
 //   - Minimum severity filter for incident events
 //   - Per-minute rate limiting
@@ -35,7 +36,24 @@ import configSchema from './schema.json';
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
+type TransportMode = 'oauth' | 'smtp';
+type OAuthProvider = 'google' | 'microsoft';
+
+interface OAuthConfig {
+  provider: OAuthProvider;
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+  /** Microsoft only — Azure AD tenant ID (default: "common") */
+  tenantId: string;
+  /** Microsoft Graph — send as a specific user (e.g. "user@domain.com").
+   *  If omitted, sends as /me (requires delegated permission). */
+  userId: string;
+}
+
 interface EmailConfig {
+  transport: TransportMode;
+  oauth: OAuthConfig;
   smtpHost: string;
   smtpPort: number;
   secure: boolean;
@@ -50,7 +68,18 @@ interface EmailConfig {
   timeoutMs: number;
 }
 
+const OAUTH_DEFAULTS: OAuthConfig = {
+  provider: 'google',
+  clientId: '',
+  clientSecret: '',
+  refreshToken: '',
+  tenantId: 'common',
+  userId: '',
+};
+
 const DEFAULTS: Omit<EmailConfig, 'smtpHost' | 'to'> = {
+  transport: 'oauth',
+  oauth: { ...OAUTH_DEFAULTS },
   smtpPort: 587,
   secure: false,
   username: '',
@@ -95,21 +124,31 @@ export interface EmailMessage {
   html: string;
 }
 
+// ── OAuth token cache ──────────────────────────────────────────────────────
+
+interface CachedToken {
+  accessToken: string;
+  expiresAt: number; // epoch ms
+}
+
 // ── Module Implementation ──────────────────────────────────────────────────
 
 export class EmailNotifier implements IModule {
   readonly manifest: ModuleManifest = {
     id: 'notifier.email',
     name: 'Email Notifier',
-    version: '1.0.0',
+    version: '2.0.0',
     type: ModuleType.Notifier,
-    description: 'Sends formatted email notifications via SMTP.',
+    description: 'Sends email notifications via OAuth 2.0 (Gmail / Microsoft Graph) or SMTP.',
     configSchema: configSchema as Record<string, unknown>,
   };
 
   private ctx!: ModuleContext;
   private config!: EmailConfig;
   private subscriptions: EventSubscription[] = [];
+
+  // OAuth token cache
+  private tokenCache: CachedToken | null = null;
 
   // Rate limiter
   private timestamps: number[] = [];
@@ -124,10 +163,22 @@ export class EmailNotifier implements IModule {
 
   async initialize(context: ModuleContext): Promise<void> {
     this.ctx = context;
-    const raw = context.config as Partial<EmailConfig>;
+    const raw = context.config as Partial<EmailConfig> & { oauth?: Partial<OAuthConfig> };
+
+    const rawOAuth: Partial<OAuthConfig> = raw.oauth ?? {};
+    const oauth: OAuthConfig = {
+      provider: rawOAuth.provider ?? OAUTH_DEFAULTS.provider,
+      clientId: rawOAuth.clientId ?? OAUTH_DEFAULTS.clientId,
+      clientSecret: rawOAuth.clientSecret ?? OAUTH_DEFAULTS.clientSecret,
+      refreshToken: rawOAuth.refreshToken ?? OAUTH_DEFAULTS.refreshToken,
+      tenantId: rawOAuth.tenantId ?? OAUTH_DEFAULTS.tenantId,
+      userId: rawOAuth.userId ?? OAUTH_DEFAULTS.userId,
+    };
 
     this.config = {
-      smtpHost: raw.smtpHost!,
+      transport: raw.transport ?? DEFAULTS.transport,
+      oauth,
+      smtpHost: raw.smtpHost ?? '',
       smtpPort: raw.smtpPort ?? DEFAULTS.smtpPort,
       secure: raw.secure ?? DEFAULTS.secure,
       username: raw.username ?? DEFAULTS.username,
@@ -142,8 +193,8 @@ export class EmailNotifier implements IModule {
     };
 
     this.ctx.logger.info('Email notifier initialized', {
-      smtpHost: this.config.smtpHost,
-      smtpPort: this.config.smtpPort,
+      transport: this.config.transport,
+      provider: this.config.transport === 'oauth' ? this.config.oauth.provider : 'smtp',
       events: this.config.events,
       to: this.config.to,
     });
@@ -178,6 +229,7 @@ export class EmailNotifier implements IModule {
 
   async destroy(): Promise<void> {
     this.timestamps = [];
+    this.tokenCache = null;
   }
 
   health(): ModuleHealth {
@@ -195,7 +247,10 @@ export class EmailNotifier implements IModule {
         totalSent: this.totalSent,
         totalDropped: this.totalDropped,
         totalErrors: this.totalErrors,
-        smtpHost: this.config?.smtpHost ?? 'missing',
+        transport: this.config?.transport ?? 'unknown',
+        provider: this.config?.transport === 'oauth'
+          ? this.config.oauth.provider
+          : `smtp://${this.config?.smtpHost ?? 'missing'}`,
         recipients: this.config?.to?.length ?? 0,
       },
       lastCheck: new Date(),
@@ -364,24 +419,185 @@ export class EmailNotifier implements IModule {
       .replace(/"/g, '&quot;');
   }
 
-  // ── SMTP Delivery ────────────────────────────────────────────────────────
+  // ── Email Delivery ─────────────────────────────────────────────────────
 
   /**
-   * Send an email via SMTP.
+   * Send an email via the configured transport (OAuth or SMTP).
    * Public so tests can override without real network access.
    */
   async sendEmail(message: EmailMessage): Promise<void> {
-    // Build RFC 5322 message
+    if (this.config.transport === 'oauth') {
+      await this.oauthSend(message);
+    } else {
+      await this.smtpSendMessage(message);
+    }
+  }
+
+  // ── OAuth Delivery ───────────────────────────────────────────────────────
+
+  /**
+   * Refresh the OAuth 2.0 access token using the stored refresh token.
+   * Caches the token and reuses it until ~60 s before expiry.
+   */
+  async refreshAccessToken(): Promise<string> {
+    if (this.tokenCache && Date.now() < this.tokenCache.expiresAt - 60_000) {
+      return this.tokenCache.accessToken;
+    }
+
+    const { provider, clientId, clientSecret, refreshToken, tenantId } = this.config.oauth;
+
+    let tokenUrl: string;
+    let body: string;
+
+    if (provider === 'google') {
+      tokenUrl = 'https://oauth2.googleapis.com/token';
+      body = [
+        `client_id=${encodeURIComponent(clientId)}`,
+        `client_secret=${encodeURIComponent(clientSecret)}`,
+        `refresh_token=${encodeURIComponent(refreshToken)}`,
+        'grant_type=refresh_token',
+      ].join('&');
+    } else {
+      // Microsoft
+      const tid = tenantId || 'common';
+      tokenUrl = `https://login.microsoftonline.com/${tid}/oauth2/v2.0/token`;
+      body = [
+        `client_id=${encodeURIComponent(clientId)}`,
+        `client_secret=${encodeURIComponent(clientSecret)}`,
+        `refresh_token=${encodeURIComponent(refreshToken)}`,
+        'grant_type=refresh_token',
+        'scope=https%3A%2F%2Fgraph.microsoft.com%2F.default+offline_access',
+      ].join('&');
+    }
+
+    const resp = await this.httpsPost(tokenUrl, body, {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    });
+
+    const data = JSON.parse(resp) as { access_token: string; expires_in: number };
+    if (!data.access_token) {
+      throw new Error(`OAuth token refresh failed: ${resp.slice(0, 300)}`);
+    }
+
+    this.tokenCache = {
+      accessToken: data.access_token,
+      expiresAt: Date.now() + data.expires_in * 1000,
+    };
+
+    this.ctx.logger.info('OAuth access token refreshed', {
+      provider,
+      expiresInSec: data.expires_in,
+    });
+
+    return data.access_token;
+  }
+
+  /**
+   * Send an email via the provider's REST API.
+   */
+  private async oauthSend(message: EmailMessage): Promise<void> {
+    const token = await this.refreshAccessToken();
+
+    if (this.config.oauth.provider === 'google') {
+      await this.sendViaGmail(token, message);
+    } else {
+      await this.sendViaMicrosoftGraph(token, message);
+    }
+  }
+
+  /**
+   * Gmail API — POST /gmail/v1/users/me/messages/send
+   * Accepts a base64url-encoded RFC 5322 message.
+   */
+  private async sendViaGmail(token: string, message: EmailMessage): Promise<void> {
+    const rfc5322 = this.buildRfc5322(message);
+    // base64url encode
+    const encoded = Buffer.from(rfc5322)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    const payload = JSON.stringify({ raw: encoded });
+
+    const resp = await this.httpsPost(
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+      payload,
+      {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    );
+
+    const result = JSON.parse(resp);
+    if (!result.id) {
+      throw new Error(`Gmail API error: ${resp.slice(0, 300)}`);
+    }
+  }
+
+  /**
+   * Microsoft Graph API — POST /v1.0/me/sendMail  or /users/{userId}/sendMail
+   * Accepts a JSON message body.
+   */
+  private async sendViaMicrosoftGraph(token: string, message: EmailMessage): Promise<void> {
+    const userId = this.config.oauth.userId;
+    const endpoint = userId
+      ? `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(userId)}/sendMail`
+      : 'https://graph.microsoft.com/v1.0/me/sendMail';
+
+    const payload = JSON.stringify({
+      message: {
+        subject: message.subject,
+        body: {
+          contentType: 'HTML',
+          content: message.html,
+        },
+        toRecipients: this.config.to.map((addr) => ({
+          emailAddress: { address: addr },
+        })),
+        from: {
+          emailAddress: { address: this.config.from },
+        },
+      },
+      saveToSentItems: false,
+    });
+
+    const resp = await this.httpsPost(endpoint, payload, {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    });
+
+    // Graph returns 202 with empty body on success
+    if (resp && resp.trim().length > 0) {
+      try {
+        const result = JSON.parse(resp);
+        if (result.error) {
+          throw new Error(`Graph API error: ${result.error.message ?? resp.slice(0, 300)}`);
+        }
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          // Non-JSON response is OK (202 no content)
+        } else {
+          throw e;
+        }
+      }
+    }
+  }
+
+  /**
+   * Build an RFC 5322 message string (used by both SMTP and Gmail API).
+   */
+  private buildRfc5322(message: EmailMessage): string {
     const boundary = `----=_Part_${Date.now().toString(36)}`;
     const toHeader = this.config.to.join(', ');
-    const raw = [
+    return [
       `From: ${this.config.from}`,
       `To: ${toHeader}`,
       `Subject: ${message.subject}`,
       `MIME-Version: 1.0`,
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
       `Date: ${new Date().toUTCString()}`,
-      `X-Mailer: OpsPilot/1.0`,
+      `X-Mailer: OpsPilot/2.0`,
       '',
       `--${boundary}`,
       'Content-Type: text/html; charset=UTF-8',
@@ -391,7 +607,69 @@ export class EmailNotifier implements IModule {
       '',
       `--${boundary}--`,
     ].join('\r\n');
+  }
 
+  /**
+   * Minimal HTTPS POST helper using Node.js built-in https module.
+   * Returns the response body as a string.
+   */
+  async httpsPost(
+    url: string,
+    body: string,
+    headers: Record<string, string>,
+  ): Promise<string> {
+    const https = await import('node:https');
+    const { URL } = await import('node:url');
+    const parsed = new URL(url);
+
+    return new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        req.destroy();
+        reject(new Error(`HTTPS request timeout: ${url}`));
+      }, this.config.timeoutMs);
+
+      const req = https.request(
+        {
+          hostname: parsed.hostname,
+          port: parsed.port || 443,
+          path: parsed.pathname + parsed.search,
+          method: 'POST',
+          headers: {
+            ...headers,
+            'Content-Length': Buffer.byteLength(body).toString(),
+          },
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+          res.on('end', () => {
+            clearTimeout(timer);
+            if (res.statusCode && res.statusCode >= 400) {
+              reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0, 500)}`));
+            } else {
+              resolve(data);
+            }
+          });
+        },
+      );
+
+      req.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+
+      req.write(body);
+      req.end();
+    });
+  }
+
+  // ── SMTP Delivery (legacy fallback) ──────────────────────────────────────
+
+  /**
+   * Send an email via SMTP (legacy transport).
+   */
+  private async smtpSendMessage(message: EmailMessage): Promise<void> {
+    const raw = this.buildRfc5322(message);
     await this.smtpSend(raw);
   }
 
@@ -545,5 +823,13 @@ export class EmailNotifier implements IModule {
       totalDropped: this.totalDropped,
       totalErrors: this.totalErrors,
     };
+  }
+
+  getTokenCache(): CachedToken | null {
+    return this.tokenCache;
+  }
+
+  clearTokenCache(): void {
+    this.tokenCache = null;
   }
 }
